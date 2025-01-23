@@ -1,3 +1,4 @@
+pub mod filesystem;
 pub mod in_memory;
 #[cfg(test)]
 pub mod tests;
