@@ -1,0 +1,173 @@
+use crate::storage::Storage;
+use std::io;
+use std::io::{Read, Write};
+
+#[macro_export]
+macro_rules! test_storage {
+    ($mod_name:ident, $constructor:expr) => {
+        mod $mod_name {
+            use super::*;
+            use crate::storage::tests::{read_file_from_storage_to_string, write_file_to_storage};
+
+            #[test]
+            fn test_get_returns_error_for_non_existent_file() {
+                let storage = $constructor;
+                let result = storage.get("/non-existent-file.txt");
+                assert_eq!(result.err().unwrap().kind(), ErrorKind::NotFound);
+            }
+
+            #[test]
+            fn test_list_returns_error_for_non_existent_dir() {
+                let storage = $constructor;
+                let result = storage.list("/non-existent-dir");
+                assert_eq!(result.err().unwrap().kind(), ErrorKind::NotFound);
+            }
+
+            #[test]
+            fn test_list_returns_error_for_non_existent_file_or_dir() {
+                let mut storage = $constructor;
+                let result = storage.delete("/non-existent");
+                assert_eq!(result.err().unwrap().kind(), ErrorKind::NotFound);
+            }
+
+            #[test]
+            fn test_can_get_file_that_was_previously_put_into_storage() {
+                let mut storage = $constructor;
+                write_file_to_storage(&mut storage, "/dir/file.txt", "Hello, world!").unwrap();
+                assert_eq!(
+                    &read_file_from_storage_to_string(&storage, "/dir/file.txt").unwrap(),
+                    "Hello, world!"
+                );
+            }
+
+            #[test]
+            fn test_different_files_are_separate() {
+                let mut storage = $constructor;
+
+                write_file_to_storage(&mut storage, "/a.txt", "Hello, a!").unwrap();
+                write_file_to_storage(&mut storage, "/b.txt", "Hello, b!").unwrap();
+
+                assert_eq!(
+                    &read_file_from_storage_to_string(&storage, "/a.txt").unwrap(),
+                    "Hello, a!"
+                );
+                assert_eq!(
+                    &read_file_from_storage_to_string(&storage, "/b.txt").unwrap(),
+                    "Hello, b!"
+                );
+            }
+
+            #[test]
+            fn test_can_overwrite_existing_file() {
+                let mut storage = $constructor;
+                write_file_to_storage(&mut storage, "/file.txt", "Hello, world!").unwrap();
+                write_file_to_storage(&mut storage, "/file.txt", "Bye, world!").unwrap();
+                assert_eq!(
+                    &read_file_from_storage_to_string(&storage, "/file.txt").unwrap(),
+                    "Bye, world!"
+                );
+            }
+
+            #[test]
+            fn test_errors_when_trying_to_overwrite_dir_with_file() {
+                let mut storage = $constructor;
+                write_file_to_storage(&mut storage, "/dir/file.txt", "file-content").unwrap();
+                assert!(storage.put("dir").is_err());
+            }
+
+            #[test]
+            fn test_list_returns_direct_children_of_directory() {
+                let mut storage = $constructor;
+                write_file_to_storage(&mut storage, "/rootfile.txt", "rootfile-content").unwrap();
+                write_file_to_storage(&mut storage, "/dir/file1.txt", "file1-content").unwrap();
+                write_file_to_storage(&mut storage, "/dir/file2.txt", "file2-content").unwrap();
+                write_file_to_storage(&mut storage, "/dir/subdir/subfile.txt", "subfile-content")
+                    .unwrap();
+
+                let mut entries: Vec<_> = storage.list("/").unwrap().map(Result::unwrap).collect();
+                entries.sort_unstable_by_key(|entry| entry.name.to_string());
+                assert_eq!(
+                    entries,
+                    vec![
+                        StorageEntry {
+                            entry_type: EntryType::Directory,
+                            name: Cow::Owned("dir".to_string()),
+                        },
+                        StorageEntry {
+                            entry_type: EntryType::File,
+                            name: Cow::Owned("rootfile.txt".to_string()),
+                        }
+                    ]
+                );
+
+                let mut entries: Vec<_> =
+                    storage.list("/dir").unwrap().map(Result::unwrap).collect();
+                entries.sort_unstable_by_key(|entry| entry.name.to_string());
+                assert_eq!(
+                    entries,
+                    vec![
+                        StorageEntry {
+                            entry_type: EntryType::File,
+                            name: Cow::Owned("file1.txt".to_string()),
+                        },
+                        StorageEntry {
+                            entry_type: EntryType::File,
+                            name: Cow::Owned("file2.txt".to_string()),
+                        },
+                        StorageEntry {
+                            entry_type: EntryType::Directory,
+                            name: Cow::Owned("subdir".to_string()),
+                        },
+                    ]
+                );
+            }
+
+            #[test]
+            fn test_can_delete_file() {
+                let mut storage = $constructor;
+                write_file_to_storage(&mut storage, "/file.txt", "file-content").unwrap();
+                storage.delete("/file.txt").unwrap();
+                assert_eq!(
+                    storage.get("/file.txt").err().unwrap().kind(),
+                    ErrorKind::NotFound
+                );
+                assert_eq!(storage.list("/").unwrap().count(), 0);
+            }
+
+            #[test]
+            fn test_can_delete_empty_directory() {
+                let mut storage = $constructor;
+                write_file_to_storage(&mut storage, "/dir/file.txt", "file-content").unwrap();
+                storage.delete("/dir/file.txt").unwrap();
+                storage.delete("/dir").unwrap();
+                assert_eq!(storage.list("/").unwrap().count(), 0);
+            }
+
+            #[test]
+            fn test_delete_returns_error_for_non_empty_dir() {
+                let mut storage = $constructor;
+                write_file_to_storage(&mut storage, "/dir/file.txt", "file-content").unwrap();
+                assert_eq!(
+                    storage.delete("/dir").err().unwrap().kind(),
+                    ErrorKind::DirectoryNotEmpty
+                );
+            }
+        }
+    };
+}
+
+pub fn write_file_to_storage(
+    storage: &mut impl Storage,
+    path: &str,
+    content: &str,
+) -> io::Result<()> {
+    let mut writer = storage.put(path)?;
+    writer.write_all(content.as_bytes())
+}
+
+pub fn read_file_from_storage_to_string(storage: &impl Storage, path: &str) -> io::Result<String> {
+    let mut reader = storage.get(path)?;
+    let mut buf = String::new();
+    reader.read_to_string(&mut buf)?;
+    Ok(buf)
+}
