@@ -29,6 +29,10 @@ impl Storage for FilesystemStorage {
         File::open(self.root.join(self.canonical_path(path)?))
     }
 
+    fn exists_file(&mut self, path: &str) -> io::Result<bool> {
+        Ok(self.root.join(self.canonical_path(path)?).is_file())
+    }
+
     fn list(&self, path: &str) -> io::Result<impl Iterator<Item = io::Result<StorageEntry>>> {
         Ok(self
             .root
@@ -118,6 +122,10 @@ mod tests {
 
         fn get(&self, path: &str) -> io::Result<impl Read> {
             self.storage.get(path)
+        }
+
+        fn exists_file(&mut self, path: &str) -> io::Result<bool> {
+            self.storage.exists_file(path)
         }
 
         fn list(&self, path: &str) -> io::Result<impl Iterator<Item = io::Result<StorageEntry>>> {

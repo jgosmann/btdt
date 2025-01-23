@@ -48,6 +48,16 @@ impl Storage for InMemoryStorage {
         ))
     }
 
+    fn exists_file(&mut self, path: &str) -> io::Result<bool> {
+        match self.get(path) {
+            Ok(_) => Ok(true),
+            Err(err) => match err.kind() {
+                ErrorKind::IsADirectory | ErrorKind::NotFound => Ok(false),
+                _ => Err(err),
+            },
+        }
+    }
+
     fn get(&self, path: &str) -> io::Result<impl Read> {
         let mut dir = &self.root;
         let mut components = path.path_components()?;

@@ -152,6 +152,16 @@ macro_rules! test_storage {
                     ErrorKind::DirectoryNotEmpty
                 );
             }
+
+            #[test]
+            fn test_exists_returns_true_for_existing_file() {
+                let mut storage = $constructor;
+                assert!(!storage.exists_file("/dir").unwrap());
+                assert!(!storage.exists_file("/dir/file.txt").unwrap());
+                write_file_to_storage(&mut storage, "/dir/file.txt", "file-content").unwrap();
+                assert!(!storage.exists_file("/dir").unwrap());
+                assert!(storage.exists_file("/dir/file.txt").unwrap());
+            }
         }
     };
 }

@@ -9,6 +9,7 @@ use std::io::{Read, Write};
 
 pub trait Storage {
     fn delete(&mut self, path: &str) -> io::Result<()>;
+    fn exists_file(&mut self, path: &str) -> io::Result<bool>;
     fn get(&self, path: &str) -> io::Result<impl Read>;
     fn list(&self, path: &str) -> io::Result<impl Iterator<Item = io::Result<StorageEntry>>>;
     fn put(&mut self, path: &str) -> io::Result<impl Write>;
