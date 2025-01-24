@@ -5,6 +5,7 @@ mod path_iter;
 
 use super::in_memory::dir_node::{DirNode, Node};
 use super::in_memory::path_iter::PathIterExt;
+use crate::close::{Close, SelfClosing};
 use crate::storage::{EntryType, Storage, StorageEntry};
 use std::borrow::Cow;
 use std::io;
@@ -122,12 +123,14 @@ impl Storage for InMemoryStorage {
         }))
     }
 
-    fn put(&mut self, path: &str) -> io::Result<impl Write> {
+    fn put(&mut self, path: &str) -> io::Result<impl Write + Close> {
         let mut dir = &mut self.root;
         let mut components = path.path_components()?;
         for component in components.by_ref() {
             if component.is_last {
-                return dir.create_file(component.name.to_string());
+                return dir
+                    .create_file(component.name.to_string())
+                    .map(SelfClosing::new);
             }
 
             dir = dir.get_or_insert_dir(component.name.to_string())?;

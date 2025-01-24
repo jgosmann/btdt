@@ -1,5 +1,6 @@
 mod staged_file;
 
+use crate::close::Close;
 use crate::storage::filesystem::staged_file::StagedFile;
 use crate::storage::{EntryType, Storage, StorageEntry};
 use std::borrow::Cow;
@@ -61,7 +62,7 @@ impl Storage for FilesystemStorage {
             .filter_map(Result::transpose))
     }
 
-    fn put(&mut self, path: &str) -> io::Result<impl Write> {
+    fn put(&mut self, path: &str) -> io::Result<impl Write + Close> {
         let canonical_path = self.canonical_path(path)?;
         if self.root.exists() {
             if let Some(parent_dir) = canonical_path.parent() {
@@ -135,7 +136,7 @@ mod tests {
             self.storage.list(path)
         }
 
-        fn put(&mut self, path: &str) -> io::Result<impl Write> {
+        fn put(&mut self, path: &str) -> io::Result<impl Write + Close> {
             self.storage.put(path)
         }
     }

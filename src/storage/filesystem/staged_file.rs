@@ -1,3 +1,4 @@
+use crate::close::Close;
 use nanoid::nanoid;
 use std::ffi::OsStr;
 use std::fs::File;
@@ -9,6 +10,7 @@ pub struct StagedFile<P: AsRef<Path>> {
     file: File,
     tmp_path: PathBuf,
     target_path: P,
+    finalized: bool,
 }
 
 impl<P: AsRef<Path>> StagedFile<P> {
@@ -30,7 +32,13 @@ impl<P: AsRef<Path>> StagedFile<P> {
             file,
             tmp_path,
             target_path,
+            finalized: false,
         })
+    }
+
+    fn finalize(&mut self) -> io::Result<()> {
+        self.finalized = true;
+        fs::rename(&self.tmp_path, self.target_path.as_ref())
     }
 }
 
@@ -44,10 +52,18 @@ impl<P: AsRef<Path>> Write for StagedFile<P> {
     }
 }
 
+impl<P: AsRef<Path>> Close for StagedFile<P> {
+    fn close(mut self) -> io::Result<()> {
+        self.finalize()
+    }
+}
+
 impl<P: AsRef<Path>> Drop for StagedFile<P> {
     fn drop(&mut self) {
-        fs::rename(&self.tmp_path, self.target_path.as_ref())
-            .expect("Failed to rename temporary file to target path");
+        if !self.finalized {
+            self.finalize()
+                .expect("Failed to move temporary file to target path");
+        }
     }
 }
 
@@ -79,5 +95,16 @@ mod tests {
         let mut file = StagedFile::new_with_suffix(&path, suffix).unwrap();
         file.write_all("Hello, world!".as_bytes()).unwrap();
         assert!(StagedFile::new_with_suffix(&path, suffix).is_err());
+    }
+
+    #[test]
+    fn test_can_close_and_drop() {
+        let tempdir = tempdir().unwrap();
+        let path = tempdir.path().join("test.txt");
+        {
+            let mut file = StagedFile::new(&path, &mut StdRng::seed_from_u64(0)).unwrap();
+            file.write_all("Hello, world!".as_bytes()).unwrap();
+            file.close().unwrap();
+        }
     }
 }

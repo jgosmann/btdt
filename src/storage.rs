@@ -3,6 +3,7 @@ pub mod in_memory;
 #[cfg(test)]
 pub mod tests;
 
+use super::close::Close;
 use std::borrow::Cow;
 use std::io;
 use std::io::{Read, Write};
@@ -12,7 +13,7 @@ pub trait Storage {
     fn exists_file(&mut self, path: &str) -> io::Result<bool>;
     fn get(&self, path: &str) -> io::Result<impl Read>;
     fn list(&self, path: &str) -> io::Result<impl Iterator<Item = io::Result<StorageEntry>>>;
-    fn put(&mut self, path: &str) -> io::Result<impl Write>;
+    fn put(&mut self, path: &str) -> io::Result<impl Write + Close>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
