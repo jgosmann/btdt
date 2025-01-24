@@ -1,3 +1,6 @@
+mod staged_file;
+
+use crate::storage::filesystem::staged_file::StagedFile;
 use crate::storage::{EntryType, Storage, StorageEntry};
 use std::borrow::Cow;
 use std::fs::File;
@@ -77,7 +80,7 @@ impl Storage for FilesystemStorage {
                 }
             }
         }
-        File::create(self.root.join(self.canonical_path(path)?))
+        StagedFile::new(self.root.join(canonical_path))
     }
 }
 

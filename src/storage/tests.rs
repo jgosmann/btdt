@@ -162,6 +162,28 @@ macro_rules! test_storage {
                 assert!(!storage.exists_file("/dir").unwrap());
                 assert!(storage.exists_file("/dir/file.txt").unwrap());
             }
+
+            #[test]
+            fn test_put_is_atomic() {
+                let mut storage_a = $constructor;
+                let mut storage_b = $constructor;
+                let mut writer_a = storage_a.put("/file.txt").unwrap();
+                let mut writer_b = storage_b.put("/file.txt").unwrap();
+                writer_a.write_all(b"Hello, ").unwrap();
+                writer_a.flush().unwrap();
+                writer_b.write_all(b"Goodbye, ").unwrap();
+                writer_b.flush().unwrap();
+                writer_a.write_all(b"world!").unwrap();
+                writer_a.flush().unwrap();
+                writer_b.write_all(b"world!").unwrap();
+                writer_b.flush().unwrap();
+                drop(writer_a);
+                drop(writer_b);
+                let content_a = &read_file_from_storage_to_string(&storage_a, "/file.txt").unwrap();
+                let content_b = &read_file_from_storage_to_string(&storage_a, "/file.txt").unwrap();
+                assert!(content_a == "Hello, world!" || content_a == "Goodbye, world!");
+                assert!(content_b == "Hello, world!" || content_b == "Goodbye, world!");
+            }
         }
     };
 }
