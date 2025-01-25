@@ -2,6 +2,9 @@ use crate::close::Close;
 use std::io;
 use std::io::{Read, Write};
 
+mod blob_id;
+mod meta;
+
 pub trait Cache {
     type Reader: Read;
     type Writer: Write + Close;
