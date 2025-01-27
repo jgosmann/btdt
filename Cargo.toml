@@ -8,7 +8,7 @@ blake3 = "1.5.5"
 chrono = "0.4.39"
 data-encoding = "2.7.0"
 data-encoding-macro = "0.1.16"
-rand = { version = "0.8.5", features = ["std_rng"] }
+rand = { version = "0.9.0", features = ["std_rng"] }
 rkyv = "0.8.10"
 
 [dev-dependencies]

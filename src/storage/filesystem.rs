@@ -20,7 +20,7 @@ impl FilesystemStorage {
     pub fn new(root: PathBuf) -> Self {
         FilesystemStorage {
             root,
-            rng: StdRng::from_entropy(),
+            rng: StdRng::from_os_rng(),
         }
     }
 }

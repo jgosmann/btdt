@@ -23,6 +23,6 @@ impl<R: CryptoRng + RngCore> BlobIdFactory<R> {
 
 impl Default for BlobIdFactory<StdRng> {
     fn default() -> BlobIdFactory<StdRng> {
-        Self::new(StdRng::from_entropy())
+        Self::new(StdRng::from_os_rng())
     }
 }
