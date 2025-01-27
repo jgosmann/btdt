@@ -4,8 +4,10 @@ mod file_reader;
 mod path_iter;
 
 use super::in_memory::dir_node::{DirNode, Node};
+use super::in_memory::file_reader::FileReader;
 use super::in_memory::path_iter::PathIterExt;
 use crate::close::{Close, SelfClosing};
+use crate::storage::in_memory::file_node::FileNode;
 use crate::storage::{EntryType, Storage, StorageEntry};
 use std::borrow::Cow;
 use std::io;
@@ -25,6 +27,9 @@ impl InMemoryStorage {
 }
 
 impl Storage for InMemoryStorage {
+    type Reader<'a> = FileReader<'a>;
+    type Writer<'a> = SelfClosing<&'a FileNode>;
+
     fn delete(&mut self, path: &str) -> io::Result<()> {
         let mut dir = &mut self.root;
         for component in path.path_components()? {
@@ -59,7 +64,7 @@ impl Storage for InMemoryStorage {
         }
     }
 
-    fn get(&self, path: &str) -> io::Result<impl Read> {
+    fn get<'a>(&'a self, path: &str) -> io::Result<Self::Reader<'a>> {
         let mut dir = &self.root;
         let mut components = path.path_components()?;
         for component in components.by_ref() {
@@ -123,7 +128,7 @@ impl Storage for InMemoryStorage {
         }))
     }
 
-    fn put(&mut self, path: &str) -> io::Result<impl Write + Close> {
+    fn put<'a>(&'a mut self, path: &str) -> io::Result<Self::Writer<'a>> {
         let mut dir = &mut self.root;
         let mut components = path.path_components()?;
         for component in components.by_ref() {

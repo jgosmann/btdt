@@ -20,6 +20,9 @@ impl FilesystemStorage {
 }
 
 impl Storage for FilesystemStorage {
+    type Reader<'a> = File;
+    type Writer<'a> = StagedFile<PathBuf>;
+
     fn delete(&mut self, path: &str) -> io::Result<()> {
         let full_path = self.root.join(self.canonical_path(path)?);
         if full_path.is_dir() {
@@ -29,7 +32,7 @@ impl Storage for FilesystemStorage {
         }
     }
 
-    fn get(&self, path: &str) -> io::Result<impl Read> {
+    fn get<'a>(&'a self, path: &str) -> io::Result<Self::Reader<'a>> {
         File::open(self.root.join(self.canonical_path(path)?))
     }
 
@@ -62,7 +65,7 @@ impl Storage for FilesystemStorage {
             .filter_map(Result::transpose))
     }
 
-    fn put(&mut self, path: &str) -> io::Result<impl Write + Close> {
+    fn put<'a>(&'a mut self, path: &str) -> io::Result<Self::Writer<'a>> {
         let canonical_path = self.canonical_path(path)?;
         if self.root.exists() {
             if let Some(parent_dir) = canonical_path.parent() {
@@ -120,11 +123,14 @@ mod tests {
     }
 
     impl Storage for FilesystemStorageTestFixture {
+        type Reader<'a> = <FilesystemStorage as Storage>::Reader<'a>;
+        type Writer<'a> = <FilesystemStorage as Storage>::Writer<'a>;
+
         fn delete(&mut self, path: &str) -> io::Result<()> {
             self.storage.delete(path)
         }
 
-        fn get(&self, path: &str) -> io::Result<impl Read> {
+        fn get<'a>(&'a self, path: &str) -> io::Result<Self::Reader<'a>> {
             self.storage.get(path)
         }
 
@@ -136,7 +142,7 @@ mod tests {
             self.storage.list(path)
         }
 
-        fn put(&mut self, path: &str) -> io::Result<impl Write + Close> {
+        fn put<'a>(&'a mut self, path: &str) -> io::Result<Self::Writer<'a>> {
             self.storage.put(path)
         }
     }
