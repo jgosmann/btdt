@@ -3,6 +3,7 @@ use std::io;
 use std::io::{Read, Write};
 
 mod blob_id;
+pub mod local;
 mod meta;
 
 pub trait Cache {
