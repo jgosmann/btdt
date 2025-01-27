@@ -1,5 +1,6 @@
 use crate::close::Close;
-use nanoid::nanoid;
+use crate::encoding::ICASE_NOPAD_ALPHANUMERIC_ENCODING;
+use rand::{CryptoRng, RngCore};
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{ErrorKind, Write};
@@ -14,8 +15,13 @@ pub struct StagedFile<P: AsRef<Path>> {
 }
 
 impl<P: AsRef<Path>> StagedFile<P> {
-    pub fn new(target_path: P) -> io::Result<Self> {
-        Self::new_with_suffix(target_path, &nanoid!(6))
+    pub fn new<R: CryptoRng + RngCore>(target_path: P, rng: &mut R) -> io::Result<Self> {
+        let mut bytes = [0; 4];
+        rng.fill_bytes(&mut bytes);
+        Self::new_with_suffix(
+            target_path,
+            &ICASE_NOPAD_ALPHANUMERIC_ENCODING.encode(bytes.as_ref()),
+        )
     }
 
     fn new_with_suffix(target_path: P, suffix: &str) -> io::Result<Self> {
@@ -70,6 +76,8 @@ impl<P: AsRef<Path>> Drop for StagedFile<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::rngs::StdRng;
+    use rand::SeedableRng;
     use std::io::Read;
     use tempfile::tempdir;
 
@@ -77,7 +85,7 @@ mod tests {
     fn test_file_not_available_until_drop() {
         let tempdir = tempdir().unwrap();
         let path = tempdir.path().join("test.txt");
-        let mut file = StagedFile::new(&path).unwrap();
+        let mut file = StagedFile::new(&path, &mut StdRng::seed_from_u64(0)).unwrap();
         file.write_all("Hello, world!".as_bytes()).unwrap();
         assert!(!path.exists());
 

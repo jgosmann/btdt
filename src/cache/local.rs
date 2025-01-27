@@ -2,22 +2,14 @@ use super::blob_id::{BlobId, BlobIdFactory};
 use super::meta::{Meta, META_MAX_SIZE};
 use super::Cache;
 use crate::close::Close;
+use crate::encoding::ICASE_NOPAD_ALPHANUMERIC_ENCODING;
 use crate::storage::Storage;
 use chrono::Utc;
-use data_encoding::Encoding;
-use data_encoding_macro::new_encoding;
 use rkyv::AlignedVec;
 use std::io;
 use std::io::{ErrorKind, Read, Write};
 use std::ops::Deref;
 use std::pin::Pin;
-
-const PATH_ENCODING: Encoding = new_encoding! {
-    symbols: "abcdefghijklmnopqrstuvwxyz012345",
-    padding: None,
-    translate_from: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-    translate_to: "abcdefghijklmnopqrstuvwxyz",
-};
 
 pub struct LocalCache<S: Storage> {
     storage: S,
@@ -33,13 +25,14 @@ impl<S: Storage> LocalCache<S> {
     }
 
     fn blob_path(blob_id: &BlobId) -> String {
-        let blob_id = PATH_ENCODING.encode(blob_id.as_ref());
+        let blob_id = ICASE_NOPAD_ALPHANUMERIC_ENCODING.encode(blob_id.as_ref());
         format!("/blob/{}/{}", &blob_id[..2], &blob_id[2..])
     }
 
     fn meta_path(key: &str) -> String {
         // Use a hash of the key to avoid too many files in a single directory
-        let hash = PATH_ENCODING.encode(&blake3::hash(key.as_bytes()).as_bytes()[..2]);
+        let hash =
+            ICASE_NOPAD_ALPHANUMERIC_ENCODING.encode(&blake3::hash(key.as_bytes()).as_bytes()[..2]);
         format!("/meta/{}/{}", hash, key)
     }
 }

@@ -3,6 +3,8 @@ mod staged_file;
 use crate::close::Close;
 use crate::storage::filesystem::staged_file::StagedFile;
 use crate::storage::{EntryType, Storage, StorageEntry};
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use std::borrow::Cow;
 use std::fs::File;
 use std::io::{ErrorKind, Read, Write};
@@ -11,11 +13,15 @@ use std::{fs, io};
 
 pub struct FilesystemStorage {
     root: PathBuf,
+    rng: StdRng,
 }
 
 impl FilesystemStorage {
     pub fn new(root: PathBuf) -> Self {
-        FilesystemStorage { root }
+        FilesystemStorage {
+            root,
+            rng: StdRng::from_entropy(),
+        }
     }
 }
 
@@ -84,7 +90,7 @@ impl Storage for FilesystemStorage {
                 }
             }
         }
-        StagedFile::new(self.root.join(canonical_path))
+        StagedFile::new(self.root.join(canonical_path), &mut self.rng)
     }
 }
 
