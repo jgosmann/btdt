@@ -1,27 +1,40 @@
 use super::blob_id::{BlobId, BlobIdFactory};
 use super::meta::{Meta, META_MAX_SIZE};
 use super::Cache;
+use crate::clock::{Clock, SystemClock};
 use crate::close::Close;
 use crate::encoding::ICASE_NOPAD_ALPHANUMERIC_ENCODING;
 use crate::storage::Storage;
-use chrono::Utc;
 use rkyv::AlignedVec;
+use std::cell::RefCell;
 use std::io;
 use std::io::{ErrorKind, Read, Write};
 use std::ops::Deref;
 use std::pin::Pin;
 
-pub struct LocalCache<S: Storage> {
-    storage: S,
+pub struct LocalCache<S: Storage, C: Clock = SystemClock> {
+    storage: RefCell<S>,
     blob_id_factory: BlobIdFactory,
+    clock: C,
 }
 
 impl<S: Storage> LocalCache<S> {
     pub fn new(storage: S) -> Self {
-        LocalCache {
-            storage,
+        Self::with_clock(storage, SystemClock)
+    }
+}
+
+impl<S: Storage, C: Clock> LocalCache<S, C> {
+    pub fn with_clock(storage: S, clock: C) -> Self {
+        Self {
+            storage: RefCell::new(storage),
             blob_id_factory: BlobIdFactory::default(),
+            clock,
         }
+    }
+
+    pub fn into_storage(self) -> S {
+        self.storage.into_inner()
     }
 
     fn blob_path(blob_id: &BlobId) -> String {
@@ -37,22 +50,29 @@ impl<S: Storage> LocalCache<S> {
     }
 }
 
-impl<S: Storage> Cache for LocalCache<S> {
+impl<S: Storage, C: Clock> Cache for LocalCache<S, C> {
     type Reader = S::Reader;
     type Writer = CacheWriter<S, AlignedVec>;
 
     fn get(&self, keys: &[&str]) -> io::Result<Option<Self::Reader>> {
-        // TODO update access time
         for key in keys {
-            match self.storage.get(&Self::meta_path(key)) {
+            let meta_path = Self::meta_path(key);
+            let entry = self.storage.borrow().get(&meta_path);
+            match entry {
                 Ok(mut reader) => {
                     let mut meta_data = [0u8; META_MAX_SIZE];
                     reader.read_exact(meta_data.as_mut())?;
-                    let meta = Meta::from_bytes(meta_data).map_err(|err| {
+                    let mut meta = Meta::from_bytes(meta_data).map_err(|err| {
                         io::Error::new(ErrorKind::InvalidData, format!("{:?}", err))
                     })?;
+
+                    meta.set_latest_access(self.clock.now());
+                    let mut writer = self.storage.borrow_mut().put(&meta_path)?;
+                    writer.write_all(meta.deref().as_ref())?;
+                    writer.close()?;
+
                     let blob_path = Self::blob_path(meta.blob_id());
-                    return Ok(Some(self.storage.get(&blob_path)?));
+                    return Ok(Some(self.storage.borrow().get(&blob_path)?));
                 }
                 Err(err) => match err.kind() {
                     ErrorKind::NotFound => continue,
@@ -65,13 +85,13 @@ impl<S: Storage> Cache for LocalCache<S> {
 
     fn set(&mut self, keys: &[&str]) -> io::Result<Self::Writer> {
         let blob_id = self.blob_id_factory.new_id();
-        let meta = Meta::new(blob_id, Utc::now());
+        let meta = Meta::new(blob_id, self.clock.now());
         let blob_path = Self::blob_path(&blob_id);
-        let blob_writer = self.storage.put(&blob_path)?;
+        let blob_writer = self.storage.borrow_mut().put(&blob_path)?;
         let meta_writers = keys
             .iter()
             .map(|&key| Self::meta_path(key))
-            .map(|key| self.storage.put(&key))
+            .map(|key| self.storage.borrow_mut().put(&key))
             .collect::<io::Result<Vec<_>>>()?;
         Ok(CacheWriter::new(blob_writer, meta_writers, meta))
     }
@@ -125,7 +145,9 @@ impl<S: Storage, M: AsRef<[u8]>> Close for CacheWriter<S, M> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::clock::test_fakes::ControlledClock;
     use crate::storage::in_memory::InMemoryStorage;
+    use chrono::{DateTime, TimeDelta};
 
     #[test]
     fn test_returns_none_for_non_existent_keys() {
@@ -186,5 +208,33 @@ mod tests {
         let mut buf = String::new();
         reader.read_to_string(&mut buf).unwrap();
         assert_eq!(buf, "Hello, world!");
+    }
+
+    #[test]
+    fn test_get_updates_last_access_time() {
+        let mut clock = ControlledClock::new(
+            DateTime::parse_from_rfc3339("2025-01-02T03:04:05Z")
+                .unwrap()
+                .to_utc(),
+        );
+        let storage = InMemoryStorage::new();
+        let mut cache = LocalCache::with_clock(storage, clock.clone());
+
+        let mut writer = cache.set(&["key"]).unwrap();
+        writer.write_all(b"Hello, world!").unwrap();
+        writer.close().unwrap();
+
+        clock.advance_by(TimeDelta::days(1));
+        let mut reader = cache.get(&["key"]).unwrap().unwrap();
+        reader.read_to_string(&mut String::new()).unwrap();
+
+        let storage = cache.into_storage();
+        let mut meta_reader = storage
+            .get(&LocalCache::<InMemoryStorage>::meta_path("key"))
+            .unwrap();
+        let mut buf = Vec::with_capacity(META_MAX_SIZE);
+        meta_reader.read_to_end(&mut buf).unwrap();
+        let meta = Meta::from_bytes(&mut buf).unwrap();
+        assert_eq!(meta.deref().latest_access().unwrap(), clock.now());
     }
 }
