@@ -1,6 +1,7 @@
 use crate::cache::blob_id::BlobId;
 use chrono::{DateTime, Utc};
-use rkyv::{AlignedVec, Archive, Serialize};
+use rkyv::util::AlignedVec;
+use rkyv::{rancor, Archive, Serialize};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomPinned;
@@ -8,8 +9,8 @@ use std::pin::Pin;
 use std::ptr::NonNull;
 
 #[derive(Archive, Clone, Debug, Serialize, PartialEq)]
-#[archive(check_bytes, compare(PartialEq))]
-#[archive_attr(derive(Debug))]
+#[rkyv(compare(PartialEq), attr(derive(Debug)))]
+#[repr(C)]
 struct MetaV1 {
     version: u16,
     blob_id: BlobId,
@@ -30,7 +31,7 @@ impl MetaV1 {
     }
 }
 
-pub const META_MAX_SIZE: usize = 32;
+pub const META_MAX_SIZE: usize = 40;
 
 #[derive(Debug)]
 pub struct Meta<T> {
@@ -42,16 +43,15 @@ pub struct Meta<T> {
 impl Meta<AlignedVec> {
     pub fn new(blob_id: BlobId, latest_access: DateTime<Utc>) -> Pin<Box<Self>> {
         let meta = MetaV1::new(blob_id, latest_access);
-        let data = rkyv::to_bytes::<MetaV1, _META_V1_SCRATCH_SIZE>(&meta)
-            .expect("failed to serialize meta");
+        let data = rkyv::to_bytes::<rancor::Error>(&meta).expect("failed to serialize meta");
         let mut boxed_meta = Box::new(Self {
             data,
             archive_view: NonNull::dangling(),
             _pin: PhantomPinned,
         });
-        // Safety: we just serialized the data
+        // TODO access_mut?
         boxed_meta.archive_view =
-            NonNull::from(unsafe { rkyv::archived_root::<MetaV1>(&boxed_meta.data) });
+            NonNull::from(rkyv::access::<ArchivedMetaV1, rancor::Error>(&boxed_meta.data).unwrap());
         Box::into_pin(boxed_meta)
     }
 }
@@ -63,7 +63,7 @@ impl<T: AsMut<[u8]>> Meta<T> {
             archive_view: NonNull::dangling(),
             _pin: PhantomPinned,
         });
-        let meta = rkyv::check_archived_root::<MetaV1>(boxed_meta.data.as_mut())?;
+        let meta = rkyv::access::<ArchivedMetaV1, rancor::Error>(boxed_meta.data.as_mut())?;
         boxed_meta.archive_view = NonNull::from(meta);
         Ok(Box::into_pin(boxed_meta))
     }
@@ -73,8 +73,8 @@ impl<T: AsMut<[u8]>> Meta<T> {
         let x = unsafe { self.as_mut().get_unchecked_mut() };
         // Safety: self.archive_view is always a valid pointer after initialization
         let archive_view = unsafe { x.archive_view.as_mut() };
-        archive_view.latest_access = latest_access.timestamp();
-        archive_view.latest_access_nsecs = latest_access.timestamp_subsec_nanos();
+        archive_view.latest_access = latest_access.timestamp().into();
+        archive_view.latest_access_nsecs = latest_access.timestamp_subsec_nanos().into();
     }
 }
 
@@ -88,8 +88,11 @@ impl<T: AsRef<[u8]>> Meta<T> {
     pub fn latest_access(&self) -> Result<DateTime<Utc>, DeserializationError<()>> {
         // Safety: self.archive_view is always a valid pointer after initialization
         let archive_view = unsafe { self.archive_view.as_ref() };
-        DateTime::from_timestamp(archive_view.latest_access, archive_view.latest_access_nsecs)
-            .ok_or(DeserializationError::from(()))
+        DateTime::from_timestamp(
+            archive_view.latest_access.to_native(),
+            archive_view.latest_access_nsecs.to_native(),
+        )
+        .ok_or(DeserializationError::from(()))
     }
 }
 
@@ -122,36 +125,7 @@ impl<C: Debug> Error for DeserializationError<C> {}
 mod tests {
     use super::*;
     use crate::cache::blob_id::BLOB_ID_SIZE;
-    use rkyv::ser::serializers::{
-        AlignedSerializer, AllocScratch, CompositeSerializer, FallbackScratch, HeapScratch,
-        ScratchTracker, SharedSerializeMap,
-    };
-    use rkyv::ser::Serializer;
-    use rkyv::AlignedVec;
     use std::ops::{Add, Deref};
-
-    #[test]
-    fn test_meta_v1_scratch_size() {
-        let meta = MetaV1::new(
-            [0; BLOB_ID_SIZE],
-            DateTime::parse_from_rfc3339("2025-01-24T20:47:33.123Z")
-                .unwrap()
-                .to_utc(),
-        );
-
-        let tracker = ScratchTracker::new(FallbackScratch::new(
-            HeapScratch::<_META_V1_SCRATCH_SIZE>::new(),
-            AllocScratch::new(),
-        ));
-        let mut serializer = Box::new(CompositeSerializer::new(
-            AlignedSerializer::<AlignedVec>::default(),
-            tracker,
-            SharedSerializeMap::default(),
-        ));
-        serializer.serialize_value(&meta).unwrap();
-        let (_, tracker, _) = serializer.into_components();
-        assert_eq!(tracker.max_bytes_allocated(), _META_V1_SCRATCH_SIZE);
-    }
 
     #[test]
     fn test_meta_stores_values_passed_in_constructor() {

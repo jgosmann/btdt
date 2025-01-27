@@ -5,7 +5,7 @@ use crate::clock::{Clock, SystemClock};
 use crate::close::Close;
 use crate::encoding::ICASE_NOPAD_ALPHANUMERIC_ENCODING;
 use crate::storage::Storage;
-use rkyv::AlignedVec;
+use rkyv::util::AlignedVec;
 use std::cell::RefCell;
 use std::io;
 use std::io::{ErrorKind, Read, Write};
