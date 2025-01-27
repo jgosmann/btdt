@@ -24,6 +24,12 @@ impl InMemoryStorage {
     }
 }
 
+impl Default for InMemoryStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Storage for InMemoryStorage {
     type Reader = FileReader;
     type Writer = SelfClosing<FileWriter>;
