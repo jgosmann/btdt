@@ -8,22 +8,15 @@ use std::borrow::Cow;
 use std::io;
 use std::io::{Read, Write};
 
-pub trait Captures<U> {}
-impl<T: ?Sized, U> Captures<U> for T {}
-
 pub trait Storage {
-    type Reader<'a>: Read + Captures<&'a ()>
-    where
-        Self: 'a;
-    type Writer<'a>: Write + Close + Captures<&'a ()>
-    where
-        Self: 'a;
+    type Reader: Read;
+    type Writer: Write + Close;
 
     fn delete(&mut self, path: &str) -> io::Result<()>;
     fn exists_file(&mut self, path: &str) -> io::Result<bool>;
-    fn get<'a>(&'a self, path: &str) -> io::Result<Self::Reader<'a>>;
+    fn get(&self, path: &str) -> io::Result<Self::Reader>;
     fn list(&self, path: &str) -> io::Result<impl Iterator<Item = io::Result<StorageEntry>>>;
-    fn put<'a>(&'a mut self, path: &str) -> io::Result<Self::Writer<'a>>;
+    fn put(&mut self, path: &str) -> io::Result<Self::Writer>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

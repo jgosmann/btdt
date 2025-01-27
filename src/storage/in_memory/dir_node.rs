@@ -1,12 +1,13 @@
-use super::file_node::FileNode;
+use super::file_node::{FileNode, FileWriter};
 use std::collections::HashMap;
 use std::io;
 use std::io::ErrorKind;
+use std::rc::Rc;
 
 #[derive(Debug, Clone)]
 pub enum Node {
     Dir(DirNode),
-    File(FileNode),
+    File(Rc<FileNode>),
 }
 
 #[derive(Debug, Clone)]
@@ -60,18 +61,18 @@ impl DirNode {
         }
     }
 
-    pub fn create_file(&mut self, name: String) -> io::Result<&FileNode> {
+    pub fn create_file(&mut self, name: String) -> io::Result<FileWriter> {
         let node = self
             .0
             .entry(name)
             .and_modify(|node| {
                 if let Node::File(_) = node {
-                    *node = Node::File(FileNode::new());
+                    *node = Node::File(Rc::new(FileNode::new()));
                 }
             })
-            .or_insert(Node::File(FileNode::new()));
+            .or_insert(Node::File(Rc::new(FileNode::new())));
         match node {
-            Node::File(file) => Ok(file),
+            Node::File(file) => Ok(file.writer()),
             Node::Dir(_) => Err(io::Error::new(
                 ErrorKind::IsADirectory,
                 "A directory with the same name already exists",
