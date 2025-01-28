@@ -1,6 +1,5 @@
 mod staged_file;
 
-use crate::close::Close;
 use crate::storage::filesystem::staged_file::StagedFile;
 use crate::storage::{EntryType, Storage, StorageEntry};
 use rand::rngs::StdRng;

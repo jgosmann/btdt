@@ -1,10 +1,10 @@
 use super::blob_id::{BlobId, BlobIdFactory};
 use super::meta::{Meta, META_MAX_SIZE};
 use super::Cache;
-use crate::clock::{Clock, SystemClock};
-use crate::close::Close;
-use crate::encoding::ICASE_NOPAD_ALPHANUMERIC_ENCODING;
 use crate::storage::Storage;
+use crate::util::clock::{Clock, SystemClock};
+use crate::util::close::Close;
+use crate::util::encoding::ICASE_NOPAD_ALPHANUMERIC_ENCODING;
 use rkyv::util::AlignedVec;
 use std::cell::RefCell;
 use std::io;
@@ -145,8 +145,8 @@ impl<S: Storage, M: AsRef<[u8]>> Close for CacheWriter<S, M> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::clock::test_fakes::ControlledClock;
     use crate::storage::in_memory::InMemoryStorage;
+    use crate::util::clock::test_fakes::ControlledClock;
     use chrono::{DateTime, TimeDelta};
 
     #[test]

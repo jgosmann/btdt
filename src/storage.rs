@@ -3,7 +3,7 @@ pub mod in_memory;
 #[cfg(test)]
 pub mod tests;
 
-use super::close::Close;
+use super::util::close::Close;
 use std::borrow::Cow;
 use std::io;
 use std::io::{Read, Write};

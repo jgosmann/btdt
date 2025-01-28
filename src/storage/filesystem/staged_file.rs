@@ -1,5 +1,5 @@
-use crate::close::Close;
-use crate::encoding::ICASE_NOPAD_ALPHANUMERIC_ENCODING;
+use crate::util::close::Close;
+use crate::util::encoding::ICASE_NOPAD_ALPHANUMERIC_ENCODING;
 use rand::{CryptoRng, RngCore};
 use std::ffi::OsStr;
 use std::fs::File;

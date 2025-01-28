@@ -1,4 +1,4 @@
-use crate::close::Close;
+use crate::util::close::Close;
 use std::io;
 use std::io::{Read, Write};
 

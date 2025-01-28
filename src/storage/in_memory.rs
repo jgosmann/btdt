@@ -4,9 +4,9 @@ mod path_iter;
 
 use super::in_memory::dir_node::{DirNode, Node};
 use super::in_memory::path_iter::PathIterExt;
-use crate::close::{Close, SelfClosing};
 use crate::storage::in_memory::file_node::{FileReader, FileWriter};
 use crate::storage::{EntryType, Storage, StorageEntry};
+use crate::util::close::SelfClosing;
 use std::borrow::Cow;
 use std::io;
 use std::io::{ErrorKind, Read, Write};

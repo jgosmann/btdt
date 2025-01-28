@@ -1,5 +1,7 @@
 pub mod cache;
-mod clock;
-pub mod close;
-mod encoding;
 pub mod storage;
+pub mod util {
+    pub(crate) mod clock;
+    pub mod close;
+    pub(crate) mod encoding;
+}
