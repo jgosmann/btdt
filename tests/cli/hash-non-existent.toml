@@ -1,0 +1,9 @@
+bin.name = "btdt"
+args = "hash non-exsistent.txt"
+stderr = """
+Error: Could not open: non-exsistent.txt
+
+Caused by:
+    No such file or directory (os error 2)
+"""
+status.code = 1

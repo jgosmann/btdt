@@ -6,3 +6,6 @@ pub mod util {
     pub mod close;
     pub(crate) mod encoding;
 }
+pub mod test_util {
+    pub mod fs_spec;
+}

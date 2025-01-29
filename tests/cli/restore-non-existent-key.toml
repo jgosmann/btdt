@@ -1,0 +1,7 @@
+bin.name = "btdt"
+args = "restore --cache ./cache --keys non-existent-key dest"
+status.code = 2
+stderr = """
+Keys not found in cache.
+"""
+fs.sandbox = true

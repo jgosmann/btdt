@@ -1,0 +1,10 @@
+bin.name = "btdt"
+args = "store --cache ./cache --keys cache-key source"
+stderr = """
+Error: Could not cache: source
+
+Caused by:
+    No such file or directory (os error 2)
+"""
+status.code = 1
+fs.sandbox = true

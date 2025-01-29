@@ -1,0 +1,10 @@
+bin.name = "btdt"
+args = "restore --cache ./cache --keys cache-key dest"
+stderr = """
+Error: Could not access cache: ./cache
+
+Caused by:
+    No such file or directory (os error 2)
+"""
+status.code = 1
+fs.sandbox = true
