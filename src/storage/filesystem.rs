@@ -6,7 +6,7 @@ use rand::rngs::StdRng;
 use rand::SeedableRng;
 use std::borrow::Cow;
 use std::fs::File;
-use std::io::{ErrorKind, Read, Write};
+use std::io::ErrorKind;
 use std::path::{Component, PathBuf};
 use std::{fs, io};
 

@@ -9,7 +9,7 @@ use crate::storage::{EntryType, Storage, StorageEntry};
 use crate::util::close::SelfClosing;
 use std::borrow::Cow;
 use std::io;
-use std::io::{ErrorKind, Read, Write};
+use std::io::ErrorKind;
 
 #[derive(Debug, Clone)]
 pub struct InMemoryStorage {

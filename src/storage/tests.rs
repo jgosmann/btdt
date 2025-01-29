@@ -8,6 +8,8 @@ macro_rules! test_storage {
         mod $mod_name {
             use super::*;
             use crate::storage::tests::{read_file_from_storage_to_string, write_file_to_storage};
+            #[allow(unused_imports)] // false positive
+            use std::io::{Read, Write};
 
             #[test]
             fn test_get_returns_error_for_non_existent_file() {
