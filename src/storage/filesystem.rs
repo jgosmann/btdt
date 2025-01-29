@@ -29,7 +29,7 @@ impl Storage for FilesystemStorage {
     type Writer = StagedFile<PathBuf>;
 
     fn delete(&mut self, path: &str) -> io::Result<()> {
-        let full_path = self.root.join(self.canonical_path(path)?);
+        let full_path = self.canonical_path(path)?;
         if full_path.is_dir() {
             fs::remove_dir(full_path)
         } else {
@@ -38,17 +38,16 @@ impl Storage for FilesystemStorage {
     }
 
     fn get(&self, path: &str) -> io::Result<Self::Reader> {
-        File::open(self.root.join(self.canonical_path(path)?))
+        File::open(self.canonical_path(path)?)
     }
 
     fn exists_file(&mut self, path: &str) -> io::Result<bool> {
-        Ok(self.root.join(self.canonical_path(path)?).is_file())
+        Ok(self.canonical_path(path)?.is_file())
     }
 
     fn list(&self, path: &str) -> io::Result<impl Iterator<Item = io::Result<StorageEntry>>> {
         Ok(self
-            .root
-            .join(self.canonical_path(path)?)
+            .canonical_path(path)?
             .read_dir()?
             .map(|entry| {
                 let entry = entry?;
@@ -89,7 +88,7 @@ impl Storage for FilesystemStorage {
                 }
             }
         }
-        StagedFile::new(self.root.join(canonical_path), &mut self.rng)
+        StagedFile::new(canonical_path, &mut self.rng)
     }
 }
 
