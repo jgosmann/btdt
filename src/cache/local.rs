@@ -7,7 +7,7 @@ use crate::util::close::Close;
 use crate::util::encoding::ICASE_NOPAD_ALPHANUMERIC_ENCODING;
 use chrono::TimeDelta;
 use rkyv::util::AlignedVec;
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashSet};
 use std::io;
@@ -108,22 +108,16 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
 
         {
             let storage = self.storage.borrow();
-            let key_dirs = storage.list("/meta")?.collect::<io::Result<Vec<_>>>()?;
-            for key_dir in key_dirs
-                .iter()
-                .filter(|key_dir| key_dir.entry_type == EntryType::Directory)
-            {
-                for key in storage.list(&format!("/meta/{}", key_dir.name))? {
-                    let key = key?;
-                    let meta = self.read_meta(&Self::meta_path(&key.name))?;
-                    key_heap.push((
-                        Reverse(meta.latest_access().map_err(|err| {
-                            io::Error::new(ErrorKind::InvalidData, format!("{:?}", err))
-                        })?),
-                        key.name.to_string(),
-                        *meta.blob_id(),
-                    ));
-                }
+            for entry in Self::iter_subdir_files(&storage, "/meta")? {
+                let entry = entry?;
+                let meta = self.read_meta(&entry.path)?;
+                key_heap.push((
+                    Reverse(meta.latest_access().map_err(|err| {
+                        io::Error::new(ErrorKind::InvalidData, format!("{:?}", err))
+                    })?),
+                    entry.name.to_string(),
+                    *meta.blob_id(),
+                ));
             }
         }
 
@@ -145,17 +139,14 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
         let mut dead_blobs = Vec::with_capacity(live_blobs.len());
         {
             let storage = self.storage.borrow();
-            let blob_dirs = storage.list("/blob")?.collect::<io::Result<Vec<_>>>()?;
-            for blob_dir in blob_dirs {
-                for blob in storage.list(&format!("/blob/{}", blob_dir.name))? {
-                    let blob = blob?;
-                    if let Ok(blob_id) = ICASE_NOPAD_ALPHANUMERIC_ENCODING
-                        .decode(format!("{}{}", blob_dir.name, blob.name).as_bytes())
-                    {
-                        let blob_id: BlobId = blob_id.try_into().unwrap();
-                        if !live_blobs.contains(&blob_id) {
-                            dead_blobs.push(blob_id);
-                        }
+            for blob in Self::iter_subdir_files(&storage, "/blob")? {
+                let blob = blob?;
+                if let Ok(blob_id) = ICASE_NOPAD_ALPHANUMERIC_ENCODING
+                    .decode(format!("{}{}", blob.subdir, blob.name).as_bytes())
+                {
+                    let blob_id: BlobId = blob_id.try_into().unwrap();
+                    if !live_blobs.contains(&blob_id) {
+                        dead_blobs.push(blob_id);
                     }
                 }
             }
@@ -176,6 +167,47 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
         Meta::from_bytes(meta_data)
             .map_err(|err| io::Error::new(ErrorKind::InvalidData, format!("{:?}", err)))
     }
+
+    fn iter_subdir_files<'a>(
+        storage: &'a Ref<S>,
+        path: &'a str,
+    ) -> io::Result<impl Iterator<Item = io::Result<SubdirFile>> + use<'a, S, C>> {
+        let path_entries = storage.list(path)?.collect::<io::Result<Vec<_>>>()?;
+        Ok(path_entries.into_iter().flat_map(move |path_entry| {
+            if path_entry.entry_type != EntryType::Directory {
+                return vec![].into_iter();
+            }
+
+            let subdir_path = format!("{}/{}", path, path_entry.name);
+            let subdir_entries = storage.list(&subdir_path);
+            match subdir_entries {
+                Ok(subdir_entries) => subdir_entries
+                    .filter_map(|subdir_entry| match subdir_entry {
+                        Ok(subdir_entry) => {
+                            if subdir_entry.entry_type != EntryType::File {
+                                return None;
+                            }
+
+                            Some(Ok(SubdirFile {
+                                path: format!("{}/{}", subdir_path, subdir_entry.name),
+                                subdir: path_entry.name.to_string(),
+                                name: subdir_entry.name.to_string(),
+                            }))
+                        }
+                        Err(err) => Some(Err(err)),
+                    })
+                    .collect::<Vec<_>>()
+                    .into_iter(),
+                Err(err) => vec![Err(err)].into_iter(),
+            }
+        }))
+    }
+}
+
+struct SubdirFile {
+    path: String,
+    subdir: String,
+    name: String,
 }
 
 pub struct CacheWriter<S: Storage, M: AsRef<[u8]>> {
