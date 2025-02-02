@@ -60,15 +60,9 @@ impl<S: Storage, C: Clock> Cache for LocalCache<S, C> {
     fn get(&self, keys: &[&str]) -> io::Result<Option<Self::Reader>> {
         for key in keys {
             let meta_path = Self::meta_path(key);
-            let entry = self.storage.borrow().get(&meta_path);
-            match entry {
-                Ok(mut reader) => {
-                    let mut meta_data = [0u8; META_MAX_SIZE];
-                    reader.read_exact(meta_data.as_mut())?;
-                    let mut meta = Meta::from_bytes(meta_data).map_err(|err| {
-                        io::Error::new(ErrorKind::InvalidData, format!("{:?}", err))
-                    })?;
-
+            let meta = self.read_meta(&meta_path);
+            match meta {
+                Ok(mut meta) => {
                     meta.set_latest_access(self.clock.now());
                     let mut writer = self.storage.borrow_mut().put(&meta_path)?;
                     writer.write_all(meta.deref().as_ref())?;
@@ -121,12 +115,7 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
             {
                 for key in storage.list(&format!("/meta/{}", key_dir.name))? {
                     let key = key?;
-                    let mut reader = storage.get(&Self::meta_path(&key.name))?;
-                    let mut meta_data = [0u8; META_MAX_SIZE];
-                    reader.read_exact(meta_data.as_mut())?;
-                    let meta = Meta::from_bytes(meta_data).map_err(|err| {
-                        io::Error::new(ErrorKind::InvalidData, format!("{:?}", err))
-                    })?;
+                    let meta = self.read_meta(&Self::meta_path(&key.name))?;
                     key_heap.push((
                         Reverse(meta.latest_access().map_err(|err| {
                             io::Error::new(ErrorKind::InvalidData, format!("{:?}", err))
@@ -178,6 +167,14 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
         }
 
         Ok(())
+    }
+
+    fn read_meta(&self, path: &str) -> io::Result<Pin<Box<Meta<[u8; META_MAX_SIZE]>>>> {
+        let mut reader = self.storage.borrow().get(path)?;
+        let mut meta_data = [0u8; META_MAX_SIZE];
+        reader.read_exact(meta_data.as_mut())?;
+        Meta::from_bytes(meta_data)
+            .map_err(|err| io::Error::new(ErrorKind::InvalidData, format!("{:?}", err)))
     }
 }
 
