@@ -1,12 +1,15 @@
 use super::blob_id::{BlobId, BlobIdFactory};
 use super::meta::{Meta, META_MAX_SIZE};
 use super::Cache;
-use crate::storage::Storage;
+use crate::storage::{EntryType, Storage};
 use crate::util::clock::{Clock, SystemClock};
 use crate::util::close::Close;
 use crate::util::encoding::ICASE_NOPAD_ALPHANUMERIC_ENCODING;
+use chrono::TimeDelta;
 use rkyv::util::AlignedVec;
 use std::cell::RefCell;
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashSet};
 use std::io;
 use std::io::{ErrorKind, Read, Write};
 use std::ops::Deref;
@@ -95,9 +98,86 @@ impl<S: Storage, C: Clock> Cache for LocalCache<S, C> {
             .collect::<io::Result<Vec<_>>>()?;
         Ok(CacheWriter::new(blob_writer, meta_writers, meta))
     }
+}
 
-    fn clean(&mut self) -> io::Result<()> {
-        todo!()
+impl<S: Storage, C: Clock> LocalCache<S, C> {
+    pub fn clean(
+        &mut self,
+        max_unused_age: Option<TimeDelta>,
+        max_blob_size_sum: Option<usize>,
+    ) -> io::Result<()> {
+        if max_unused_age.is_none() && max_blob_size_sum.is_none() {
+            return Ok(());
+        }
+
+        let mut key_heap = BinaryHeap::new();
+
+        {
+            let storage = self.storage.borrow();
+            let key_dirs = storage.list("/meta")?.collect::<io::Result<Vec<_>>>()?;
+            for key_dir in key_dirs
+                .iter()
+                .filter(|key_dir| key_dir.entry_type == EntryType::Directory)
+            {
+                for key in storage.list(&format!("/meta/{}", key_dir.name))? {
+                    let key = key?;
+                    let mut reader = storage.get(&Self::meta_path(&key.name))?;
+                    let mut meta_data = [0u8; META_MAX_SIZE];
+                    reader.read_exact(meta_data.as_mut())?;
+                    let meta = Meta::from_bytes(meta_data).map_err(|err| {
+                        io::Error::new(ErrorKind::InvalidData, format!("{:?}", err))
+                    })?;
+                    key_heap.push((
+                        Reverse(meta.latest_access().map_err(|err| {
+                            io::Error::new(ErrorKind::InvalidData, format!("{:?}", err))
+                        })?),
+                        key.name.to_string(),
+                        *meta.blob_id(),
+                    ));
+                }
+            }
+        }
+
+        if let Some(max_unused_age) = max_unused_age {
+            let cutoff = self.clock.now() - max_unused_age;
+            while !key_heap.is_empty() {
+                if let Some((Reverse(latest_access), _, _)) = key_heap.peek() {
+                    if latest_access >= &cutoff {
+                        break;
+                    }
+                }
+                let (_, key, _) = key_heap.pop().unwrap();
+                self.storage.borrow_mut().delete(&Self::meta_path(&key))?
+            }
+        }
+
+        // garbage collect blobs
+        let live_blobs: HashSet<BlobId> = key_heap.drain().map(|(_, _, blob_id)| blob_id).collect();
+        let mut dead_blobs = Vec::with_capacity(live_blobs.len());
+        {
+            let storage = self.storage.borrow();
+            let blob_dirs = storage.list("/blob")?.collect::<io::Result<Vec<_>>>()?;
+            for blob_dir in blob_dirs {
+                for blob in storage.list(&format!("/blob/{}", blob_dir.name))? {
+                    let blob = blob?;
+                    if let Ok(blob_id) = ICASE_NOPAD_ALPHANUMERIC_ENCODING
+                        .decode(format!("{}{}", blob_dir.name, blob.name).as_bytes())
+                    {
+                        let blob_id: BlobId = blob_id.try_into().unwrap();
+                        if !live_blobs.contains(&blob_id) {
+                            dead_blobs.push(blob_id);
+                        }
+                    }
+                }
+            }
+        }
+        for blob_id in dead_blobs {
+            self.storage
+                .borrow_mut()
+                .delete(&Self::blob_path(&blob_id))?;
+        }
+
+        Ok(())
     }
 }
 
@@ -153,21 +233,15 @@ mod tests {
     fn test_returns_none_for_non_existent_keys() {
         let storage = InMemoryStorage::new();
         let cache = LocalCache::new(storage);
-        let result = cache.get(&["non-existent-key", "another-non-existent-key"]);
-        assert!(result.unwrap().is_none());
+        assert_no_cache_entry(&cache, &["non-existent-key", "another-non-existent-key"]);
     }
 
     #[test]
     fn test_roundtrip() {
         let storage = InMemoryStorage::new();
         let mut cache = LocalCache::new(storage);
-        let mut writer = cache.set(&["key"]).unwrap();
-        writer.write_all(b"Hello, world!").unwrap();
-        writer.close().unwrap();
-        let mut reader = cache.get(&["key"]).unwrap().unwrap();
-        let mut buf = String::new();
-        reader.read_to_string(&mut buf).unwrap();
-        assert_eq!(buf, "Hello, world!");
+        cache_entry_with_content(&mut cache, &["key"], "Hello, world!").unwrap();
+        assert_cache_entry_with_content(&cache, &["key"], "Hello, world!");
     }
 
     #[test]
@@ -176,15 +250,10 @@ mod tests {
 
         let storage = InMemoryStorage::new();
         let mut cache = LocalCache::new(storage);
-        let mut writer = cache.set(&keys).unwrap();
-        writer.write_all(b"Hello, world!").unwrap();
-        writer.close().unwrap();
+        cache_entry_with_content(&mut cache, &keys, "Hello, world!").unwrap();
 
         for key in keys {
-            let mut reader = cache.get(&[key]).unwrap().unwrap();
-            let mut buf = String::new();
-            reader.read_to_string(&mut buf).unwrap();
-            assert_eq!(buf, "Hello, world!");
+            assert_cache_entry_with_content(&cache, &[key], "Hello, world!");
         }
     }
 
@@ -193,21 +262,14 @@ mod tests {
         let storage = InMemoryStorage::new();
         let mut cache = LocalCache::new(storage);
 
-        let mut writer = cache.set(&["actual-key"]).unwrap();
-        writer.write_all(b"Hello, world!").unwrap();
-        writer.close().unwrap();
+        cache_entry_with_content(&mut cache, &["actual-key"], "Hello, world!").unwrap();
+        cache_entry_with_content(&mut cache, &["ignored-key"], "Goodbye, world!").unwrap();
 
-        let mut writer = cache.set(&["ignored-key"]).unwrap();
-        writer.write_all(b"Goodbye, world!").unwrap();
-        writer.close().unwrap();
-
-        let mut reader = cache
-            .get(&["non-existent-key", "actual-key", "ignored-key"])
-            .unwrap()
-            .unwrap();
-        let mut buf = String::new();
-        reader.read_to_string(&mut buf).unwrap();
-        assert_eq!(buf, "Hello, world!");
+        assert_cache_entry_with_content(
+            &cache,
+            &["non-existent-key", "actual-key", "ignored-key"],
+            "Hello, world!",
+        );
     }
 
     #[test]
@@ -220,9 +282,7 @@ mod tests {
         let storage = InMemoryStorage::new();
         let mut cache = LocalCache::with_clock(storage, clock.clone());
 
-        let mut writer = cache.set(&["key"]).unwrap();
-        writer.write_all(b"Hello, world!").unwrap();
-        writer.close().unwrap();
+        cache_entry_with_content(&mut cache, &["key"], "Hello, world!").unwrap();
 
         clock.advance_by(TimeDelta::days(1));
         let mut reader = cache.get(&["key"]).unwrap().unwrap();
@@ -236,5 +296,87 @@ mod tests {
         meta_reader.read_to_end(&mut buf).unwrap();
         let meta = Meta::from_bytes(&mut buf).unwrap();
         assert_eq!(meta.deref().latest_access().unwrap(), clock.now());
+    }
+
+    #[test]
+    fn test_clean_does_not_do_anything_if_no_limits_are_given() {
+        let storage = InMemoryStorage::new();
+        let mut cache = LocalCache::new(storage);
+
+        cache_entry_with_content(&mut cache, &["key"], "Hello, world!").unwrap();
+
+        cache.clean(None, None).unwrap();
+
+        assert_cache_entry_with_content(&cache, &["key"], "Hello, world!");
+    }
+
+    #[test]
+    fn test_clean_removes_unused_entries() {
+        let mut clock = ControlledClock::new(
+            DateTime::parse_from_rfc3339("2025-01-02T03:04:05Z")
+                .unwrap()
+                .to_utc(),
+        );
+        let storage = InMemoryStorage::new();
+        let mut cache = LocalCache::with_clock(storage, clock.clone());
+
+        cache_entry_with_content(&mut cache, &["old"], "Hello, world!").unwrap();
+        clock.advance_by(TimeDelta::days(2));
+        cache_entry_with_content(&mut cache, &["new"], "Goodbye, world!").unwrap();
+        clock.advance_by(TimeDelta::days(1));
+
+        cache.clean(Some(TimeDelta::days(2)), None).unwrap();
+
+        assert_no_cache_entry(&cache, &["old"]);
+        assert_cache_entry_with_content(&cache, &["new"], "Goodbye, world!");
+
+        let storage = cache.into_storage();
+        let blob_dirs = storage
+            .list("/blob")
+            .unwrap()
+            .collect::<io::Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(
+            blob_dirs
+                .iter()
+                .map(|blob_dir| {
+                    storage
+                        .list(&format!("/blob/{}", blob_dir.name))
+                        .unwrap()
+                        .count()
+                })
+                .sum::<usize>(),
+            1,
+            "Expected only one blob to remain"
+        );
+    }
+
+    // TODO: test clean removes blobs exceeding cache size
+
+    fn cache_entry_with_content<C: Cache>(
+        cache: &mut C,
+        keys: &[&str],
+        content: &str,
+    ) -> io::Result<()> {
+        let mut writer = cache.set(keys)?;
+        writer.write_all(content.as_bytes())?;
+        writer.close()
+    }
+
+    fn assert_cache_entry_with_content<C: Cache>(cache: &C, keys: &[&str], content: &str) {
+        let mut reader = cache
+            .get(keys)
+            .expect("IO failure getting cache entry")
+            .expect("cache entry not found");
+        let mut buf = String::new();
+        reader
+            .read_to_string(&mut buf)
+            .expect("failed to read cache entry");
+        assert_eq!(buf, content, "cache entry content mismatch");
+    }
+
+    fn assert_no_cache_entry<C: Cache>(cache: &C, keys: &[&str]) {
+        let result = cache.get(keys).expect("IO failure getting cache entry");
+        assert!(result.is_none(), "unexpected cache entry found");
     }
 }

@@ -27,6 +27,6 @@ pub enum EntryType {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StorageEntry<'a> {
-    entry_type: EntryType,
-    name: Cow<'a, String>,
+    pub entry_type: EntryType,
+    pub name: Cow<'a, String>,
 }
