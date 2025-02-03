@@ -328,11 +328,7 @@ mod tests {
 
     #[test]
     fn test_get_updates_last_access_time() {
-        let mut clock = ControlledClock::new(
-            DateTime::parse_from_rfc3339("2025-01-02T03:04:05Z")
-                .unwrap()
-                .to_utc(),
-        );
+        let mut clock = ControlledClock::default();
         let storage = InMemoryStorage::new();
         let mut cache = LocalCache::with_clock(storage, clock.clone());
 
@@ -366,11 +362,7 @@ mod tests {
 
     #[test]
     fn test_clean_removes_unused_entries() {
-        let mut clock = ControlledClock::new(
-            DateTime::parse_from_rfc3339("2025-01-02T03:04:05Z")
-                .unwrap()
-                .to_utc(),
-        );
+        let mut clock = ControlledClock::default();
         let storage = InMemoryStorage::new();
         let mut cache = LocalCache::with_clock(storage, clock.clone());
 
@@ -390,11 +382,7 @@ mod tests {
 
     #[test]
     fn test_clean_removes_longest_unused_entries_until_space_limit_is_met() {
-        let mut clock = ControlledClock::new(
-            DateTime::parse_from_rfc3339("2025-01-02T03:04:05Z")
-                .unwrap()
-                .to_utc(),
-        );
+        let mut clock = ControlledClock::default();
         let storage = InMemoryStorage::new();
         let mut cache = LocalCache::with_clock(storage, clock.clone());
 

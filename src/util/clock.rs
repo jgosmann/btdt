@@ -46,4 +46,14 @@ pub mod test_fakes {
             self.now.get()
         }
     }
+
+    impl Default for ControlledClock {
+        fn default() -> Self {
+            Self::new(
+                DateTime::parse_from_rfc3339("2025-01-02T03:04:05Z")
+                    .unwrap()
+                    .to_utc(),
+            )
+        }
+    }
 }
