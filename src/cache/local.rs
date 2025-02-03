@@ -381,12 +381,33 @@ mod tests {
     }
 
     #[test]
+    fn test_clean_does_not_remove_entries_if_another_recently_accessed_key_exists() {
+        let mut clock = ControlledClock::default();
+        let storage = InMemoryStorage::new();
+        let mut cache = LocalCache::with_clock(storage, clock.clone());
+
+        cache_entry_with_content(&mut cache, &["old", "new"], "Hello, world!").unwrap();
+        clock.advance_by(TimeDelta::days(2));
+
+        cache.get(&["new"]).unwrap().unwrap();
+        cache.clean(Some(TimeDelta::days(1)), None).unwrap();
+
+        assert_cache_entry_with_content(&cache, &["old"], "Hello, world!");
+        assert_cache_entry_with_content(&cache, &["new"], "Hello, world!");
+    }
+
+    #[test]
     fn test_clean_removes_longest_unused_entries_until_space_limit_is_met() {
         let mut clock = ControlledClock::default();
         let storage = InMemoryStorage::new();
         let mut cache = LocalCache::with_clock(storage, clock.clone());
 
-        cache_entry_with_content(&mut cache, &["3-days-old"], "0123456789").unwrap();
+        cache_entry_with_content(
+            &mut cache,
+            &["3-days-old", "3-days-old-alternate-key"],
+            "0123456789",
+        )
+        .unwrap();
         clock.advance_by(TimeDelta::days(1));
         cache_entry_with_content(&mut cache, &["2-days-old"], "0123456789").unwrap();
         clock.advance_by(TimeDelta::days(1));
@@ -396,7 +417,10 @@ mod tests {
 
         cache.clean(None, Some(21)).unwrap();
 
-        assert_no_cache_entry(&cache, &["3-days-old", "2-days-old"]);
+        assert_no_cache_entry(
+            &cache,
+            &["3-days-old", "3-days-old-alternate-key", "2-days-old"],
+        );
         assert_cache_entry_with_content(&cache, &["1-day-old"], "0123456789");
         assert_cache_entry_with_content(&cache, &["0-days-old"], "0123456789");
 
