@@ -1,11 +1,17 @@
 use crate::util::close::Close;
 use crate::util::encoding::ICASE_NOPAD_ALPHANUMERIC_ENCODING;
+use data_encoding::Encoding;
 use rand::{CryptoRng, RngCore};
 use std::ffi::OsStr;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{ErrorKind, Write};
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
+
+const TMP_FILE_SUFFIX_ENCODING: Encoding = ICASE_NOPAD_ALPHANUMERIC_ENCODING;
+const TMP_FILE_SUFFIX_BYTES: usize = 4;
+const TMP_FILE_SUFFIX_ENCODED_LEN: usize = 7;
 
 pub struct StagedFile<P: AsRef<Path>> {
     file: File,
@@ -16,11 +22,11 @@ pub struct StagedFile<P: AsRef<Path>> {
 
 impl<P: AsRef<Path>> StagedFile<P> {
     pub fn new<R: CryptoRng + RngCore>(target_path: P, rng: &mut R) -> io::Result<Self> {
-        let mut bytes = [0; 4];
+        let mut bytes = [0; TMP_FILE_SUFFIX_BYTES];
         rng.fill_bytes(&mut bytes);
         Self::new_with_suffix(
             target_path,
-            &ICASE_NOPAD_ALPHANUMERIC_ENCODING.encode(bytes.as_ref()),
+            &TMP_FILE_SUFFIX_ENCODING.encode(bytes.as_ref()),
         )
     }
 
@@ -32,8 +38,12 @@ impl<P: AsRef<Path>> StagedFile<P> {
             .ok_or(io::Error::new(ErrorKind::InvalidInput, "Invalid filename"))?;
         let tmp_path = target_path
             .as_ref()
-            .with_file_name(format!("{}.{}", filename, suffix));
-        let file = File::create_new(&tmp_path)?;
+            .with_file_name(format!("{}.tmp.{}", filename, suffix));
+        let file = OpenOptions::new()
+            .custom_flags(libc::O_EXLOCK)
+            .create_new(true)
+            .write(true)
+            .open(&tmp_path)?;
         Ok(Self {
             file,
             tmp_path,
@@ -73,6 +83,35 @@ impl<P: AsRef<Path>> Drop for StagedFile<P> {
     }
 }
 
+pub fn clean_leftover_tmp_files<P_: AsRef<Path>>(path: P_) -> io::Result<()> {
+    for entry in path.as_ref().read_dir()? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        if file_type.is_file() {
+            if let Some(file_name) = entry.file_name().to_str() {
+                let mut parts = file_name.rsplitn(3, '.');
+                let suffix = parts.next();
+                let ext = parts.next();
+                if ext == Some("tmp")
+                    && suffix.map(|s| s.len()) == Some(TMP_FILE_SUFFIX_ENCODED_LEN)
+                {
+                    let is_locked = OpenOptions::new()
+                        .custom_flags(libc::O_EXLOCK | libc::O_NONBLOCK)
+                        .read(true)
+                        .open(entry.path())
+                        .is_ok();
+                    if is_locked {
+                        fs::remove_file(entry.path())?;
+                    }
+                }
+            }
+        } else if file_type.is_dir() {
+            clean_leftover_tmp_files(entry.path())?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -80,6 +119,16 @@ mod tests {
     use rand::SeedableRng;
     use std::io::Read;
     use tempfile::tempdir;
+
+    #[test]
+    fn test_tmp_file_suffix_encoded_is_accurate() {
+        assert_eq!(
+            TMP_FILE_SUFFIX_ENCODED_LEN,
+            TMP_FILE_SUFFIX_ENCODING
+                .encode(&[0; TMP_FILE_SUFFIX_BYTES])
+                .len()
+        );
+    }
 
     #[test]
     fn test_file_not_available_until_drop() {
@@ -114,5 +163,38 @@ mod tests {
             file.write_all("Hello, world!".as_bytes()).unwrap();
             file.close().unwrap();
         }
+    }
+
+    #[test]
+    fn test_clean_leftover_tmp_files_removes_leftover_tmp_files() {
+        let tempdir = tempdir().unwrap();
+        let subdir_path = tempdir.path().join("subdir");
+        fs::create_dir(&subdir_path).unwrap();
+        let path = subdir_path.join(format!(
+            "test.tmp.{}",
+            TMP_FILE_SUFFIX_ENCODING.encode(&[0; TMP_FILE_SUFFIX_BYTES])
+        ));
+        File::create(&path).unwrap();
+        clean_leftover_tmp_files(tempdir.path()).unwrap();
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn test_clean_leftover_tmp_files_does_not_remove_files_still_in_use() {
+        let tempdir = tempdir().unwrap();
+        let target_path = tempdir.path().join("test.txt");
+        {
+            let file = StagedFile::new(&target_path, &mut StdRng::seed_from_u64(0)).unwrap();
+            clean_leftover_tmp_files(tempdir.path()).unwrap();
+            assert!(tempdir.path().read_dir().unwrap().any(|entry| {
+                entry
+                    .unwrap()
+                    .file_name()
+                    .to_str()
+                    .unwrap()
+                    .starts_with("test.txt.tmp.")
+            }));
+        }
+        assert!(target_path.exists());
     }
 }

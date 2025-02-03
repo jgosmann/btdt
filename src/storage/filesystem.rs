@@ -1,6 +1,6 @@
 mod staged_file;
 
-use crate::storage::filesystem::staged_file::StagedFile;
+use crate::storage::filesystem::staged_file::{clean_leftover_tmp_files, StagedFile};
 use crate::storage::{EntryType, Storage, StorageEntry};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -21,6 +21,10 @@ impl FilesystemStorage {
             root,
             rng: StdRng::from_os_rng(),
         }
+    }
+
+    pub fn clean_leftover_tmp_files(&mut self) -> io::Result<()> {
+        clean_leftover_tmp_files(&self.root)
     }
 }
 

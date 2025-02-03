@@ -131,6 +131,7 @@ dependencies = [
  "clap",
  "data-encoding",
  "data-encoding-macro",
+ "libc",
  "rand",
  "rkyv",
  "tar",

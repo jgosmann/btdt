@@ -13,6 +13,7 @@ data-encoding-macro = "0.1.16"
 rand = { version = "0.9.0", features = ["std_rng"] }
 rkyv = "0.8.10"
 tar = "0.4.43"
+libc = "0.2.169"
 
 [dev-dependencies]
 tempfile = "3.15.0"
