@@ -79,4 +79,8 @@ impl DirNode {
             )),
         }
     }
+
+    pub fn size(&self) -> usize {
+        0
+    }
 }

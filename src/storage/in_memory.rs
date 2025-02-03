@@ -128,6 +128,10 @@ impl Storage for InMemoryStorage {
                     Node::File(_) => EntryType::File,
                 },
                 name: Cow::Borrowed(name),
+                size: match node {
+                    Node::Dir(dir) => dir.size() as u64,
+                    Node::File(file) => file.size() as u64,
+                },
             })
         }))
     }

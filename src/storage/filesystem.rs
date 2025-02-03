@@ -61,6 +61,11 @@ impl Storage for FilesystemStorage {
                             io::Error::new(ErrorKind::InvalidData, "File name is not valid Unicode")
                         })?),
                         entry_type,
+                        size: if entry.file_type()?.is_file() {
+                            entry.metadata()?.len()
+                        } else {
+                            0
+                        },
                     }))
                 } else {
                     Ok(None)

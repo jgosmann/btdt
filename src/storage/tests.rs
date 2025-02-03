@@ -94,10 +94,12 @@ macro_rules! test_storage {
                         StorageEntry {
                             entry_type: EntryType::Directory,
                             name: Cow::Owned("dir".to_string()),
+                            size: 0,
                         },
                         StorageEntry {
                             entry_type: EntryType::File,
                             name: Cow::Owned("rootfile.txt".to_string()),
+                            size: 16,
                         }
                     ]
                 );
@@ -111,14 +113,17 @@ macro_rules! test_storage {
                         StorageEntry {
                             entry_type: EntryType::File,
                             name: Cow::Owned("file1.txt".to_string()),
+                            size: 13,
                         },
                         StorageEntry {
                             entry_type: EntryType::File,
                             name: Cow::Owned("file2.txt".to_string()),
+                            size: 13,
                         },
                         StorageEntry {
                             entry_type: EntryType::Directory,
                             name: Cow::Owned("subdir".to_string()),
+                            size: 0,
                         },
                     ]
                 );

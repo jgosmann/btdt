@@ -20,6 +20,10 @@ impl FileNode {
     pub fn writer(self: &Rc<FileNode>) -> FileWriter {
         FileWriter::new(Rc::clone(self))
     }
+
+    pub fn size(&self) -> usize {
+        self.content.borrow().len()
+    }
 }
 
 #[derive(Debug)]

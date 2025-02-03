@@ -5,11 +5,11 @@ use crate::storage::{EntryType, Storage};
 use crate::util::clock::{Clock, SystemClock};
 use crate::util::close::Close;
 use crate::util::encoding::ICASE_NOPAD_ALPHANUMERIC_ENCODING;
-use chrono::TimeDelta;
+use chrono::{DateTime, TimeDelta, Utc};
 use rkyv::util::AlignedVec;
 use std::cell::{Ref, RefCell};
 use std::cmp::Reverse;
-use std::collections::{BinaryHeap, HashSet};
+use std::collections::{BinaryHeap, HashMap};
 use std::io;
 use std::io::{ErrorKind, Read, Write};
 use std::ops::Deref;
@@ -98,45 +98,13 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
     pub fn clean(
         &mut self,
         max_unused_age: Option<TimeDelta>,
-        max_blob_size_sum: Option<usize>,
+        max_blob_size_sum: Option<u64>,
     ) -> io::Result<()> {
         if max_unused_age.is_none() && max_blob_size_sum.is_none() {
             return Ok(());
         }
 
-        let mut key_heap = BinaryHeap::new();
-
-        {
-            let storage = self.storage.borrow();
-            for entry in Self::iter_subdir_files(&storage, "/meta")? {
-                let entry = entry?;
-                let meta = self.read_meta(&entry.path)?;
-                key_heap.push((
-                    Reverse(meta.latest_access().map_err(|err| {
-                        io::Error::new(ErrorKind::InvalidData, format!("{:?}", err))
-                    })?),
-                    entry.name.to_string(),
-                    *meta.blob_id(),
-                ));
-            }
-        }
-
-        if let Some(max_unused_age) = max_unused_age {
-            let cutoff = self.clock.now() - max_unused_age;
-            while !key_heap.is_empty() {
-                if let Some((Reverse(latest_access), _, _)) = key_heap.peek() {
-                    if latest_access >= &cutoff {
-                        break;
-                    }
-                }
-                let (_, key, _) = key_heap.pop().unwrap();
-                self.storage.borrow_mut().delete(&Self::meta_path(&key))?
-            }
-        }
-
-        // garbage collect blobs
-        let live_blobs: HashSet<BlobId> = key_heap.drain().map(|(_, _, blob_id)| blob_id).collect();
-        let mut dead_blobs = Vec::with_capacity(live_blobs.len());
+        let mut blob_sizes = HashMap::new();
         {
             let storage = self.storage.borrow();
             for blob in Self::iter_subdir_files(&storage, "/blob")? {
@@ -145,16 +113,71 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
                     .decode(format!("{}{}", blob.subdir, blob.name).as_bytes())
                 {
                     let blob_id: BlobId = blob_id.try_into().unwrap();
-                    if !live_blobs.contains(&blob_id) {
-                        dead_blobs.push(blob_id);
-                    }
+                    blob_sizes.insert(blob_id, blob.size);
                 }
             }
         }
-        for blob_id in dead_blobs {
+
+        #[derive(Debug, PartialOrd, Ord, PartialEq, Eq)]
+        struct Blob {
+            latest_access: Reverse<DateTime<Utc>>,
+            size: u64,
+            blob_id: BlobId,
+            keys: Vec<String>,
+        }
+        let mut blobs: HashMap<BlobId, Blob> = HashMap::new();
+
+        {
+            let storage = self.storage.borrow();
+            for key_file in Self::iter_subdir_files(&storage, "/meta")? {
+                let key_file = key_file?;
+                let meta = self.read_meta(&key_file.path)?;
+                let latest_access = meta
+                    .latest_access()
+                    .map_err(|err| io::Error::new(ErrorKind::InvalidData, format!("{:?}", err)))?;
+                if let Some(&size) = blob_sizes.get(meta.blob_id()) {
+                    let entry = blobs.entry(*meta.blob_id()).or_insert_with(|| Blob {
+                        latest_access: Reverse(latest_access),
+                        size,
+                        blob_id: *meta.blob_id(),
+                        keys: vec![],
+                    });
+                    entry.keys.push(key_file.name.to_string());
+                    entry.latest_access =
+                        Reverse(std::cmp::max(entry.latest_access.0, latest_access));
+                }
+            }
+        }
+
+        let mut blob_size_sum: u64 = blobs.values().map(|blob| blob.size).sum();
+        let mut heap: BinaryHeap<Blob> = blobs.into_values().collect();
+
+        let cutoff = max_unused_age.map(|max_unused_age| self.clock.now() - max_unused_age);
+        while !heap.is_empty() {
+            if let Some(Blob {
+                latest_access: Reverse(latest_access),
+                ..
+            }) = heap.peek()
+            {
+                if latest_access >= &cutoff.unwrap_or(DateTime::<Utc>::MIN_UTC)
+                    && blob_size_sum <= max_blob_size_sum.unwrap_or(u64::MAX)
+                {
+                    break;
+                }
+            }
+            let Blob {
+                keys,
+                blob_id,
+                size,
+                ..
+            } = heap.pop().unwrap();
+            for key in keys {
+                self.storage.borrow_mut().delete(&Self::meta_path(&key))?;
+            }
             self.storage
                 .borrow_mut()
                 .delete(&Self::blob_path(&blob_id))?;
+            blob_size_sum -= size;
         }
 
         Ok(())
@@ -192,6 +215,7 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
                                 path: format!("{}/{}", subdir_path, subdir_entry.name),
                                 subdir: path_entry.name.to_string(),
                                 name: subdir_entry.name.to_string(),
+                                size: subdir_entry.size,
                             }))
                         }
                         Err(err) => Some(Err(err)),
@@ -208,6 +232,7 @@ struct SubdirFile {
     path: String,
     subdir: String,
     name: String,
+    size: u64,
 }
 
 pub struct CacheWriter<S: Storage, M: AsRef<[u8]>> {
@@ -360,27 +385,41 @@ mod tests {
         assert_cache_entry_with_content(&cache, &["new"], "Goodbye, world!");
 
         let storage = cache.into_storage();
-        let blob_dirs = storage
-            .list("/blob")
-            .unwrap()
-            .collect::<io::Result<Vec<_>>>()
-            .unwrap();
-        assert_eq!(
-            blob_dirs
-                .iter()
-                .map(|blob_dir| {
-                    storage
-                        .list(&format!("/blob/{}", blob_dir.name))
-                        .unwrap()
-                        .count()
-                })
-                .sum::<usize>(),
-            1,
-            "Expected only one blob to remain"
-        );
+        assert_blob_count(&storage, 1);
     }
 
-    // TODO: test clean removes blobs exceeding cache size
+    #[test]
+    fn test_clean_removes_longest_unused_entries_until_space_limit_is_met() {
+        let mut clock = ControlledClock::new(
+            DateTime::parse_from_rfc3339("2025-01-02T03:04:05Z")
+                .unwrap()
+                .to_utc(),
+        );
+        let storage = InMemoryStorage::new();
+        let mut cache = LocalCache::with_clock(storage, clock.clone());
+
+        cache_entry_with_content(&mut cache, &["3-days-old"], "0123456789").unwrap();
+        clock.advance_by(TimeDelta::days(1));
+        cache_entry_with_content(&mut cache, &["2-days-old"], "0123456789").unwrap();
+        clock.advance_by(TimeDelta::days(1));
+        cache_entry_with_content(&mut cache, &["1-day-old"], "0123456789").unwrap();
+        clock.advance_by(TimeDelta::days(1));
+        cache_entry_with_content(&mut cache, &["0-days-old"], "0123456789").unwrap();
+
+        cache.clean(None, Some(21)).unwrap();
+
+        assert_no_cache_entry(&cache, &["3-days-old", "2-days-old"]);
+        assert_cache_entry_with_content(&cache, &["1-day-old"], "0123456789");
+        assert_cache_entry_with_content(&cache, &["0-days-old"], "0123456789");
+
+        let storage = cache.into_storage();
+        assert_blob_count(&storage, 2);
+    }
+
+    // TODO further tests for clean:
+    // - removal doesn't happen if another recently accessed key points to same blob
+    // - multiple keys pointing to same blob, all keys removed, only counted once for file size
+    // TODO ensure key without blob is handled gracefully
 
     fn cache_entry_with_content<C: Cache>(
         cache: &mut C,
@@ -407,5 +446,27 @@ mod tests {
     fn assert_no_cache_entry<C: Cache>(cache: &C, keys: &[&str]) {
         let result = cache.get(keys).expect("IO failure getting cache entry");
         assert!(result.is_none(), "unexpected cache entry found");
+    }
+
+    fn assert_blob_count<S: Storage>(storage: &S, count: usize) {
+        let blob_dirs = storage
+            .list("/blob")
+            .unwrap()
+            .collect::<io::Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(
+            blob_dirs
+                .iter()
+                .map(|blob_dir| {
+                    storage
+                        .list(&format!("/blob/{}", blob_dir.name))
+                        .unwrap()
+                        .count()
+                })
+                .sum::<usize>(),
+            count,
+            "Expected only {} blobs to remain",
+            count
+        );
     }
 }

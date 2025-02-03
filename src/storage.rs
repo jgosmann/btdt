@@ -29,4 +29,5 @@ pub enum EntryType {
 pub struct StorageEntry<'a> {
     pub entry_type: EntryType,
     pub name: Cow<'a, String>,
+    pub size: u64,
 }
