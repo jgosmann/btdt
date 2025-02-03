@@ -69,7 +69,13 @@ impl<S: Storage, C: Clock> Cache for LocalCache<S, C> {
                     writer.close()?;
 
                     let blob_path = Self::blob_path(meta.blob_id());
-                    return Ok(Some(self.storage.borrow().get(&blob_path)?));
+                    match self.storage.borrow().get(&blob_path) {
+                        Ok(reader) => return Ok(Some(reader)),
+                        Err(err) => match err.kind() {
+                            ErrorKind::NotFound => continue,
+                            _ => return Err(err),
+                        },
+                    }
                 }
                 Err(err) => match err.kind() {
                     ErrorKind::NotFound => continue,
@@ -428,10 +434,31 @@ mod tests {
         assert_blob_count(&storage, 2);
     }
 
-    // TODO further tests for clean:
-    // - removal doesn't happen if another recently accessed key points to same blob
-    // - multiple keys pointing to same blob, all keys removed, only counted once for file size
-    // TODO ensure key without blob is handled gracefully
+    #[test]
+    fn test_key_without_blob_is_handled_gracefully() {
+        let storage = InMemoryStorage::new();
+        let mut cache = LocalCache::new(storage);
+        cache_entry_with_content(&mut cache, &["key0"], "cached content").unwrap();
+
+        let mut storage = cache.into_storage();
+        let mut to_delete = Vec::new();
+        for subdir in storage.list("/blob").unwrap() {
+            let subdir = subdir.unwrap();
+            for entry in storage.list(&format!("/blob/{}", subdir.name)).unwrap() {
+                let entry = entry.unwrap();
+                to_delete.push(format!("/blob/{}/{}", subdir.name, entry.name));
+            }
+        }
+        for path in to_delete {
+            storage.delete(&path).unwrap();
+        }
+
+        let mut cache = LocalCache::new(storage);
+        cache_entry_with_content(&mut cache, &["key1"], "fallback").unwrap();
+
+        assert!(cache.get(&["key0"]).unwrap().is_none());
+        assert_cache_entry_with_content(&cache, &["key0", "key1"], "fallback");
+    }
 
     fn cache_entry_with_content<C: Cache>(
         cache: &mut C,
