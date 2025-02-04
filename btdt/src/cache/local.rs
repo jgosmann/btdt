@@ -56,7 +56,7 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
     fn meta_path(key: &str) -> String {
         // Use a hash of the key to avoid too many files in a single directory
         let hash =
-            ICASE_NOPAD_ALPHANUMERIC_ENCODING.encode(&blake3::hash(key.as_bytes()).as_bytes()[..2]);
+            ICASE_NOPAD_ALPHANUMERIC_ENCODING.encode(&blake3::hash(key.as_bytes()).as_bytes()[..1]);
         format!("/meta/{}/{}", hash, key)
     }
 }
