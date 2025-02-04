@@ -82,7 +82,7 @@ impl Storage for FilesystemStorage {
         let canonical_path = self.canonical_path(path)?;
         if self.root.exists() {
             if let Some(parent_dir) = canonical_path.parent() {
-                let mut path = self.root.clone();
+                let mut path = PathBuf::new();
                 for component in parent_dir.components() {
                     if component == Component::ParentDir {
                         return Err(io::Error::new(
@@ -116,8 +116,11 @@ impl FilesystemStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::tests::write_file_to_storage;
+    use crate::storage::tests::{read_file_from_storage_to_string, write_file_to_storage};
     use crate::test_storage;
+    use std::fs::create_dir_all;
+    use std::io::Read;
+    use std::path::Path;
     use tempfile::{tempdir, TempDir};
 
     struct FilesystemStorageTestFixture {
@@ -184,5 +187,34 @@ mod tests {
         let mut storage = FilesystemStorage::new(storage_root.clone());
         assert!(write_file_to_storage(&mut storage, "/../file.txt", "file-content").is_err());
         assert!(!storage_root.join("file.txt").exists());
+    }
+
+    struct PushCwd {
+        old_cwd: PathBuf,
+    }
+
+    impl PushCwd {
+        fn new<P: AsRef<Path>>(new_cwd: P) -> io::Result<Self> {
+            let old_cwd = std::env::current_dir()?;
+            std::env::set_current_dir(new_cwd)?;
+            Ok(Self { old_cwd })
+        }
+    }
+
+    impl Drop for PushCwd {
+        fn drop(&mut self) {
+            std::env::set_current_dir(&self.old_cwd).unwrap();
+        }
+    }
+
+    #[test]
+    fn test_with_relative_path() {
+        let tempdir = tempdir().unwrap();
+        let _push_cwd = PushCwd::new(tempdir.path()).unwrap();
+        let storage_path = PathBuf::from("dir/storage-root");
+        create_dir_all(&storage_path).unwrap();
+        let mut storage = FilesystemStorage::new(storage_path.clone());
+        write_file_to_storage(&mut storage, "/some/subdir/file.txt", "Hello, world!").unwrap();
+        read_file_from_storage_to_string(&mut storage, "/some/subdir/file.txt").unwrap();
     }
 }
