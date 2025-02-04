@@ -25,6 +25,14 @@ impl<S: Storage> LocalCache<S> {
     pub fn new(storage: S) -> Self {
         Self::with_clock(storage, SystemClock)
     }
+
+    pub fn with_blob_id_factory(storage: S, blob_id_factory: BlobIdFactory) -> Self {
+        Self {
+            storage: RefCell::new(storage),
+            blob_id_factory,
+            clock: SystemClock,
+        }
+    }
 }
 
 impl<S: Storage, C: Clock> LocalCache<S, C> {
