@@ -6,52 +6,46 @@ use rand::rngs::StdRng;
 use rand::SeedableRng;
 use std::fs::{create_dir_all, read_dir, remove_dir_all, File};
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::{fs, io};
-use tempfile::tempdir;
+use tempfile::{tempdir, TempDir};
 
-pub fn create_cache_fixtures() -> Result<(), io::Error> {
-    let base_dir = PathBuf::from("tests/cli");
+pub struct CacheFixture {
+    cache_dir: TempDir,
+}
 
-    let cache_dir = base_dir.join("_cache-fixture");
-    match remove_dir_all(&cache_dir) {
-        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
-        res => res,
-    }?;
-    create_dir_all(&cache_dir)?;
-    let mut cache_pipeline = Pipeline::new(LocalCache::with_blob_id_factory(
-        FilesystemStorage::new(cache_dir.clone()),
-        BlobIdFactory::new(StdRng::from_seed([0; 32])),
-    ));
+impl CacheFixture {
+    pub fn new() -> io::Result<Self> {
+        let cache_dir = tempdir()?;
+        let mut cache_pipeline = Pipeline::new(LocalCache::with_blob_id_factory(
+            FilesystemStorage::new(cache_dir.path().to_path_buf()),
+            BlobIdFactory::new(StdRng::from_seed([0; 32])),
+        ));
 
-    let tmp = tempdir()?;
-    {
-        let mut file = File::create_new(tmp.path().join("a.txt"))?;
-        file.write_all(b"lorem ipsum\n")?;
+        let tmp = tempdir()?;
+        {
+            let mut file = File::create_new(tmp.path().join("a.txt"))?;
+            file.write_all(b"lorem ipsum\n")?;
+        }
+        cache_pipeline.store(&["cache-key-0", "cache-key-1"], &tmp.path())?;
+
+        let tmp = tempdir()?;
+        {
+            let mut file = File::create_new(tmp.path().join("b.txt"))?;
+            file.write_all(b"wrong file restored\n")?;
+        }
+        cache_pipeline.store(&["other-cache-key"], &tmp.path())?;
+
+        Ok(Self { cache_dir })
     }
-    cache_pipeline.store(&["cache-key-0", "cache-key-1"], &tmp.path())?;
 
-    let tmp = tempdir()?;
-    {
-        let mut file = File::create_new(tmp.path().join("b.txt"))?;
-        file.write_all(b"wrong file restored\n")?;
-    }
-    cache_pipeline.store(&["other-cache-key"], &tmp.path())?;
-
-    for test_dir in [
-        "restore-first-matched-key.in",
-        "restore-first-matched-key-comma-separated.in",
-        "restore-non-existent-key.in",
-    ] {
-        let path = base_dir.join(test_dir).join("cache");
+    pub fn copy_to<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
         match remove_dir_all(&path) {
             Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
             res => res,
         }?;
-        copy_dir(&cache_dir, &path)?;
+        copy_dir(&self.cache_dir.path(), &path.as_ref())
     }
-
-    Ok(())
 }
 
 fn copy_dir<P: AsRef<Path>>(src: P, dst: P) -> io::Result<()> {

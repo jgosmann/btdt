@@ -1,5 +1,7 @@
+use crate::cache_fixture::CacheFixture;
 use btdt::test_util::fs_spec::{DirSpec, Node};
 use std::fs;
+use std::path::PathBuf;
 use std::process::Command;
 use tempfile::tempdir;
 
@@ -7,7 +9,16 @@ mod cache_fixture;
 
 #[test]
 fn test_cmd() {
-    cache_fixture::create_cache_fixtures().unwrap();
+    let cache_fixture = CacheFixture::new().unwrap();
+    for test_dir in [
+        "restore-first-matched-key.in",
+        "restore-first-matched-key-comma-separated.in",
+        "restore-non-existent-key.in",
+    ] {
+        cache_fixture
+            .copy_to(PathBuf::from("tests/cli").join(test_dir).join("cache"))
+            .unwrap();
+    }
     trycmd::TestCases::new()
         .case("tests/cli/*.md")
         .case("tests/cli/*.toml")
