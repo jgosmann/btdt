@@ -1,2 +1,3 @@
 [workspace]
 members = ["btdt", "btdt-cli"]
+resolver = "2"
