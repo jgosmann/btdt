@@ -39,6 +39,10 @@ impl CacheFixture {
         Ok(Self { cache_dir })
     }
 
+    pub fn path(&self) -> &Path {
+        self.cache_dir.path()
+    }
+
     pub fn copy_to<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
         match remove_dir_all(&path) {
             Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
