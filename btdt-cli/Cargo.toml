@@ -4,26 +4,17 @@ version = "0.1.0"
 edition = "2021"
 default-run = "btdt"
 
-[features]
-test = ["dep:rand", "dep:tempfile"]
-
 [[bin]]
 name = "btdt"
 path = "src/main.rs"
-
-[[bin]]
-name = "btdt-create-cache-fixture"
-path = "src/bin/test/create_cache_fixture.rs"
-required-features = ["test"]
 
 [dependencies]
 anyhow = "1.0.95"
 btdt = { path = "../btdt" }
 blake3 = "1.5.5"
 clap = { version = "4.5.27", features = ["derive"] }
-rand = { version = "0.9.0", features = ["std_rng"], optional = true }
-tempfile = { version = "3.15.0", optional = true }
 
 [dev-dependencies]
+rand = { version = "0.9.0", features = ["std_rng"] }
 tempfile = "3.15.0"
 trycmd = "0.15.8"

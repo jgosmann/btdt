@@ -3,8 +3,11 @@ use std::fs;
 use std::process::Command;
 use tempfile::tempdir;
 
+mod cache_fixture;
+
 #[test]
 fn test_cmd() {
+    cache_fixture::create_cache_fixtures().unwrap();
     trycmd::TestCases::new()
         .case("tests/cli/*.md")
         .case("tests/cli/*.toml")
