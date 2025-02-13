@@ -1,0 +1,4 @@
+bin.name = "btdt"
+args = "clean --cache ./cache --max-age 7d --max-size 500Mi"
+status.code = 0
+fs.sandbox = true

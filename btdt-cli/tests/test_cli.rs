@@ -11,6 +11,7 @@ mod cache_fixture;
 fn test_cmd() {
     let cache_fixture = CacheFixture::new().unwrap();
     for test_dir in [
+        "clean-supports-human-units.in",
         "restore-first-matched-key.in",
         "restore-first-matched-key-comma-separated.in",
         "restore-non-existent-key.in",

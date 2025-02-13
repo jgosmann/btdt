@@ -1,3 +1,5 @@
+mod humanbytes;
+
 use anyhow::Context;
 use btdt::cache::local::LocalCache;
 use btdt::pipeline::Pipeline;
@@ -38,7 +40,7 @@ enum Commands {
         /// Maximum size of the cache before entries are deleted.
         ///
         /// This doesn't account for metadata, thus the overall cache size may be a bit larger.
-        #[arg(long)]
+        #[arg(long, value_parser=humanbytes::parse_bytes_from_str)]
         max_size: Option<u64>,
     },
 
