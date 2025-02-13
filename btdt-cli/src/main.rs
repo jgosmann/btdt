@@ -34,10 +34,15 @@ enum Commands {
         cache_ref: CacheRef,
 
         /// Maximum age of last access before entries are deleted.
+        ///
+        /// Supports human-readable units like "1d" for one day.
         #[arg(long)]
         max_age: Option<humantime::Duration>,
 
         /// Maximum size of the cache before entries are deleted.
+        ///
+        /// Supports human-readable units like "1GiB" for one gibibyte or "1GB" for one gigabyte.
+        /// The "B" for bytes may be omitted.
         ///
         /// This doesn't account for metadata, thus the overall cache size may be a bit larger.
         #[arg(long, value_parser=humanbytes::parse_bytes_from_str)]
