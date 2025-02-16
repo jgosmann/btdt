@@ -256,11 +256,7 @@ pub struct CacheWriter<S: Storage, M: AsRef<[u8]>> {
 }
 
 impl<S: Storage, M: AsRef<[u8]>> CacheWriter<S, M> {
-    pub fn new(
-        blob_writer: S::Writer,
-        meta_writers: Vec<S::Writer>,
-        meta: Pin<Box<Meta<M>>>,
-    ) -> Self {
+    fn new(blob_writer: S::Writer, meta_writers: Vec<S::Writer>, meta: Pin<Box<Meta<M>>>) -> Self {
         CacheWriter {
             blob_writer,
             meta_writers,
