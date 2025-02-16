@@ -31,7 +31,7 @@ pub struct ComparisonMismatch {
 }
 
 impl ComparisonMismatch {
-    pub fn new(path: impl AsRef<Path>, reason: impl Into<String>) -> Self {
+    fn new(path: impl AsRef<Path>, reason: impl Into<String>) -> Self {
         ComparisonMismatch {
             path: path.as_ref().to_owned(),
             reason: reason.into(),
