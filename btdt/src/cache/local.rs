@@ -1,3 +1,5 @@
+//! Provides a local cache implementation that stores data in a storage backend.
+
 use super::blob_id::{BlobId, BlobIdFactory};
 use super::meta::{Meta, META_MAX_SIZE};
 use super::Cache;
@@ -15,6 +17,32 @@ use std::io::{ErrorKind, Read, Write};
 use std::ops::Deref;
 use std::pin::Pin;
 
+/// A local cache that stores data in a storage backend.
+///
+/// Note that the storage backend itself could store data remotely, despite the cache being
+/// implemented locally.
+///
+/// # Examples
+///
+/// ```rust
+/// # use std::io;
+/// use std::io::{Read, Write};
+/// use btdt::cache::local::LocalCache;
+/// use btdt::storage::in_memory::InMemoryStorage;
+/// use btdt::util::close::Close;
+///
+/// # fn main() -> io::Result<()> {
+/// use btdt::cache::Cache;
+/// let mut cache = LocalCache::new(InMemoryStorage::new());
+/// let mut writer = cache.set(&["cache-key"])?;
+/// writer.write_all(b"Hello, world!")?;
+/// writer.close()?;
+/// let mut buf = String::new();
+/// cache.get(&["foo", "cache-key"])?.unwrap().read_to_string(&mut buf)?;
+/// assert_eq!(buf, "Hello, world!");
+/// # Ok(())
+/// # }
+/// ```
 pub struct LocalCache<S: Storage, C: Clock = SystemClock> {
     storage: RefCell<S>,
     blob_id_factory: BlobIdFactory,
@@ -22,10 +50,13 @@ pub struct LocalCache<S: Storage, C: Clock = SystemClock> {
 }
 
 impl<S: Storage> LocalCache<S> {
+    /// Creates a new local cache that stores data in the given storage backend.
     pub fn new(storage: S) -> Self {
         Self::with_clock(storage, SystemClock)
     }
 
+    /// Creates a new local cache that stores data in the given storage backend, using the given
+    /// blob ID factory.
     pub fn with_blob_id_factory(storage: S, blob_id_factory: BlobIdFactory) -> Self {
         Self {
             storage: RefCell::new(storage),
@@ -36,7 +67,9 @@ impl<S: Storage> LocalCache<S> {
 }
 
 impl<S: Storage, C: Clock> LocalCache<S, C> {
-    pub fn with_clock(storage: S, clock: C) -> Self {
+    /// Creates a new local cache that stores data in the given storage backend, using the given
+    /// clock.
+    pub(crate) fn with_clock(storage: S, clock: C) -> Self {
         Self {
             storage: RefCell::new(storage),
             blob_id_factory: BlobIdFactory::default(),
@@ -44,6 +77,7 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
         }
     }
 
+    /// Consumes the cache and returns the underlying storage.
     pub fn into_storage(self) -> S {
         self.storage.into_inner()
     }
@@ -249,6 +283,7 @@ struct SubdirFile {
     size: u64,
 }
 
+/// A writer for a cache entry.
 pub struct CacheWriter<S: Storage, M: AsRef<[u8]>> {
     blob_writer: S::Writer,
     meta_writers: Vec<S::Writer>,

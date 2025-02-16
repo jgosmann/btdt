@@ -13,6 +13,10 @@ const TMP_FILE_SUFFIX_ENCODING: Encoding = ICASE_NOPAD_ALPHANUMERIC_ENCODING;
 const TMP_FILE_SUFFIX_BYTES: usize = 4;
 const TMP_FILE_SUFFIX_ENCODED_LEN: usize = 7;
 
+/// A file that is staged to be atomically moved to a target path.
+///
+/// The file is created with a temporary name in the same directory as the target path.
+/// Once [Close::close] is called or the instance is dropped, the file is moved to the target path.
 pub struct StagedFile<P: AsRef<Path>> {
     file: File,
     tmp_path: PathBuf,
@@ -83,6 +87,11 @@ impl<P: AsRef<Path>> Drop for StagedFile<P> {
     }
 }
 
+/// Cleans up leftover temporary files of [StagedFile] in the given directory and its
+/// subdirectories.
+///
+/// Usually the temporary file will be deleted when the [StagedFile] is closed or dropped. However,
+/// if a process is killed hard, the temporary file may be left behind.
 pub fn clean_leftover_tmp_files<P_: AsRef<Path>>(path: P_) -> io::Result<()> {
     for entry in path.as_ref().read_dir()? {
         let entry = entry?;

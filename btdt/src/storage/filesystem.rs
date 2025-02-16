@@ -1,3 +1,5 @@
+//! Implementation of the `Storage` trait for storage in the local filesystem.
+
 mod staged_file;
 
 use crate::storage::filesystem::staged_file::{clean_leftover_tmp_files, StagedFile};
@@ -10,12 +12,55 @@ use std::io::ErrorKind;
 use std::path::{Component, PathBuf};
 use std::{fs, io};
 
+/// Storage implementation using the local filesystem.
+///
+/// Multiple instances of this storage with the same root directory may be used in parallel.
+///
+/// # Examples
+///
+/// ```rust
+/// # use std::io;
+/// # use std::fs;
+/// use std::io::{Read, Write};
+/// use btdt::storage::filesystem::FilesystemStorage;
+/// use btdt::storage::Storage;
+/// use btdt::util::close::Close;
+///
+/// # const STORAGE_PATH: &str = "/tmp/btdt-storage";
+/// # struct StorageDir;
+/// # impl StorageDir {
+/// #     pub fn new() -> Self {
+/// #         fs::create_dir(STORAGE_PATH).expect(format!("Failed to create storage directory at {}", STORAGE_PATH).as_str());
+/// #         Self
+/// #     }
+/// # }
+/// # impl Drop for StorageDir {
+/// #    fn drop(&mut self) {
+/// #        fs::remove_dir_all(STORAGE_PATH).expect(format!("Failed to remove storage directory at {}", STORAGE_PATH).as_str());
+/// #    }
+/// # }
+///
+/// # fn main() -> io::Result<()> {
+/// # let _storage_dir = StorageDir::new();
+/// let mut storage = FilesystemStorage::new(STORAGE_PATH.into());
+/// let mut writer = storage.put("/foo/bar")?;
+/// writer.write_all(b"Hello, world!")?;
+/// writer.close()?;
+/// let mut buf = String::new();
+/// storage.get("/foo/bar")?.read_to_string(&mut buf)?;
+/// assert_eq!(buf, "Hello, world!");
+/// # Ok(())
+/// # }
+/// ```
 pub struct FilesystemStorage {
     root: PathBuf,
     rng: StdRng,
 }
 
 impl FilesystemStorage {
+    /// Creates a new filesystem storage with the given root directory.
+    ///
+    /// All paths will be nested in the given root directory.
     pub fn new(root: PathBuf) -> Self {
         FilesystemStorage {
             root,
@@ -23,6 +68,11 @@ impl FilesystemStorage {
         }
     }
 
+    /// Cleans up leftover temporary files in the storage.
+    ///
+    /// The filesystem storage writes temporary files to ensure atomic writes. Usually these will
+    /// be deleted automatically when the writer is dropped. However, if the process is killed hard,
+    /// these files might be left behind. This method can be used to clean them up.
     pub fn clean_leftover_tmp_files(&mut self) -> io::Result<()> {
         clean_leftover_tmp_files(&self.root)
     }

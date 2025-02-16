@@ -1,3 +1,5 @@
+//! Serialization and deserialization of metadata for cache entries.
+
 use crate::cache::blob_id::BlobId;
 use chrono::{DateTime, Utc};
 use rkyv::util::AlignedVec;

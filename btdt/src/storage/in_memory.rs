@@ -1,3 +1,5 @@
+//! Implementation of the `Storage` trait for an in-memory storage.
+
 mod dir_node;
 mod file_node;
 mod path_iter;
@@ -11,12 +13,40 @@ use std::borrow::Cow;
 use std::io;
 use std::io::ErrorKind;
 
+/// In-memory storage implementation.
+///
+/// This implementation is mainly intended for testing purposes. It could also be used as a
+/// storage in a permanently running server to avoid hitting the disk. However, performance
+/// was not a primary concern of the implementation (but might be important to you, if hitting the
+/// disk is not an option for you).
+///
+/// # Examples
+///
+/// ```rust
+/// # use std::io;
+/// use std::io::{Read, Write};
+/// use btdt::storage::in_memory::InMemoryStorage;
+/// use btdt::storage::Storage;
+/// use btdt::util::close::Close;
+///
+/// # fn main() -> io::Result<()> {
+/// let mut storage = InMemoryStorage::new();
+/// let mut writer = storage.put("/foo/bar")?;
+/// writer.write_all(b"Hello, world!")?;
+/// writer.close()?;
+/// let mut buf = String::new();
+/// storage.get("/foo/bar")?.read_to_string(&mut buf)?;
+/// assert_eq!(buf, "Hello, world!");
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone)]
 pub struct InMemoryStorage {
     root: DirNode,
 }
 
 impl InMemoryStorage {
+    /// Creates a new in-memory storage.
     pub fn new() -> Self {
         InMemoryStorage {
             root: DirNode::new(),
