@@ -8,7 +8,7 @@ See below for details.
 
 ## Example: caching `node_modules`
 
-```shell
+```sh
 CACHE_KEY=node-modules-$(btdt hash package-lock.json)
 btdt restore --cache path/to/cache --keys $CACHE_KEY node_modules
 if [ $? -ne 0 ]; then

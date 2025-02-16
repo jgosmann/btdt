@@ -1,0 +1,10 @@
+[book]
+authors = ["Jan Gosmann"]
+language = "en"
+multilingual = false
+src = "src"
+title = "btdt - User Guide"
+
+[output.html]
+git-repository-url = "https://github.com/jgosmann/btdt"
+edit-url-template = "https://github.com/jgosmann/btdt/edit/main/{path}"
