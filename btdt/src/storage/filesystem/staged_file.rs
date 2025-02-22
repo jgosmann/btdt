@@ -1,11 +1,11 @@
 use crate::util::close::Close;
 use crate::util::encoding::ICASE_NOPAD_ALPHANUMERIC_ENCODING;
 use data_encoding::Encoding;
+use fs2::FileExt;
 use rand::{CryptoRng, RngCore};
 use std::ffi::OsStr;
 use std::fs::{File, OpenOptions};
 use std::io::{ErrorKind, Write};
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
@@ -43,17 +43,28 @@ impl<P: AsRef<Path>> StagedFile<P> {
         let tmp_path = target_path
             .as_ref()
             .with_file_name(format!("{}.tmp.{}", filename, suffix));
-        let file = OpenOptions::new()
-            .custom_flags(libc::O_EXLOCK)
-            .create_new(true)
-            .write(true)
-            .open(&tmp_path)?;
-        Ok(Self {
-            file,
-            tmp_path,
-            target_path,
-            finalized: false,
-        })
+        for _ in 0..5 {
+            let file = OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&tmp_path)?;
+            file.lock_exclusive()?;
+            if !tmp_path.exists() {
+                // The file was deleted, likely by clean_leftover_tmp_files, before we could lock
+                // it. Try again.
+                continue;
+            }
+            return Ok(Self {
+                file,
+                tmp_path,
+                target_path,
+                finalized: false,
+            });
+        }
+        Err(io::Error::new(
+            ErrorKind::Other,
+            "Failed to create and lock temporary file",
+        ))
     }
 
     fn finalize(&mut self) -> io::Result<()> {
@@ -105,9 +116,9 @@ pub fn clean_leftover_tmp_files<P_: AsRef<Path>>(path: P_) -> io::Result<()> {
                     && suffix.map(|s| s.len()) == Some(TMP_FILE_SUFFIX_ENCODED_LEN)
                 {
                     let is_locked = OpenOptions::new()
-                        .custom_flags(libc::O_EXLOCK | libc::O_NONBLOCK)
                         .read(true)
                         .open(entry.path())
+                        .and_then(|file_handle| file_handle.try_lock_exclusive())
                         .is_ok();
                     if is_locked {
                         fs::remove_file(entry.path())?;
