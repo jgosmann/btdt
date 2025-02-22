@@ -55,13 +55,18 @@ impl<C: Cache> Pipeline<C> {
     /// The first key found in the cache is used to restore the files. If no key is found, nothing
     /// is restored. Restored files are written into the directory specified by `destination`.
     ///
-    /// Returns `Ok(true)` if files were restored, `Ok(false)` otherwise.
-    pub fn restore(&self, keys: &[&str], destination: impl AsRef<Path>) -> io::Result<bool> {
-        if let Some(reader) = self.cache.get(keys)? {
-            tar::Archive::new(BufReader::new(reader)).unpack(destination.as_ref())?;
-            Ok(true)
+    /// Returns `Ok(Some(key))` if files were restored where `key` is the cache key used, `Ok(None)`
+    /// otherwise.
+    pub fn restore<'a>(
+        &self,
+        keys: &[&'a str],
+        destination: impl AsRef<Path>,
+    ) -> io::Result<Option<&'a str>> {
+        if let Some(cache_hit) = self.cache.get(keys)? {
+            tar::Archive::new(BufReader::new(cache_hit.reader)).unpack(destination.as_ref())?;
+            Ok(Some(cache_hit.key))
         } else {
-            Ok(false)
+            Ok(None)
         }
     }
 
@@ -93,6 +98,7 @@ mod tests {
     use crate::cache::local::LocalCache;
     use crate::storage::in_memory::InMemoryStorage;
     use crate::test_util::fs_spec::{DirSpec, Node};
+    use std::fs;
     use tempfile::tempdir;
 
     #[test]
@@ -111,5 +117,33 @@ mod tests {
         pipeline.restore(&["cache-key"], &destination_path).unwrap();
 
         assert_eq!(spec.compare_with(&destination_path).unwrap(), vec![]);
+    }
+
+    #[test]
+    fn test_restore_returns_restored_cache_key() {
+        let cache = LocalCache::new(InMemoryStorage::new());
+        let mut pipeline = Pipeline::new(cache);
+
+        let tempdir = tempdir().unwrap();
+        let source_path = tempdir.path().join("source-root");
+        fs::create_dir(&source_path).unwrap();
+        pipeline.store(&["cache-key-0"], tempdir.path()).unwrap();
+        pipeline.store(&["cache-key-1"], tempdir.path()).unwrap();
+
+        let destination_path = tempdir.path().join("destination-root");
+
+        assert!(pipeline
+            .restore(&["non-existent"], &destination_path)
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            pipeline
+                .restore(
+                    &["non-existent", "cache-key-1", "cache-key-0"],
+                    &destination_path
+                )
+                .unwrap(),
+            Some("cache-key-1")
+        );
     }
 }

@@ -58,6 +58,13 @@ enum Commands {
     /// Restore cached files.
     ///
     /// The first key that exists in the cache will be used.
+    ///
+    /// # Exit codes:
+    ///
+    /// - 0: Files were restored from the primary (i.e. first listed) cache key.
+    /// - 1: Error in command invocation.
+    /// - 2: No keys were found in the cache.
+    /// - 3: Files were restored from a non-primary cache key.
     Restore {
         #[command(flatten)]
         entries_ref: CacheEntriesRef,
@@ -172,11 +179,17 @@ fn main() -> Result<ExitCode, anyhow::Error> {
             entries_ref,
             destination_dir,
         } => {
-            if !entries_ref
+            if let Some(restored_key) = entries_ref
                 .to_pipeline()?
                 .restore(&entries_ref.keys(), &destination_dir)
                 .with_context(|| format!("Could not restore to: {}", destination_dir.display()))?
             {
+                println!("Restored key {}", restored_key);
+                let primary_key = entries_ref.keys.first().map(String::as_str);
+                if Some(restored_key) != primary_key {
+                    return Ok(ExitCode::from(3));
+                }
+            } else {
                 eprintln!("Keys not found in cache.");
                 return Ok(ExitCode::from(2));
             }

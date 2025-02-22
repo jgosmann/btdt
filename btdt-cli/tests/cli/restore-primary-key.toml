@@ -1,0 +1,5 @@
+bin.name = "btdt"
+args = "restore --cache ./cache --keys cache-key-0 --keys other-cache-key dest"
+status.code = 0
+stdout = "Restored key cache-key-0\n"
+fs.sandbox = true

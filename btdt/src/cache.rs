@@ -28,7 +28,7 @@ pub trait Cache {
 
     /// Returns a reader for the data stored under the first given key found in the cache. If none
     /// of the keys is found, `Ok(None)` is returned.
-    fn get(&self, keys: &[&str]) -> io::Result<Option<Self::Reader>>;
+    fn get<'a>(&self, keys: &[&'a str]) -> io::Result<Option<CacheHit<'a, Self::Reader>>>;
 
     /// Returns a writer for the data to be stored under all the given keys.
     ///
@@ -37,4 +37,13 @@ pub trait Cache {
     /// The writer must be finalized by calling [Close::close] to make the data available
     /// atomically.
     fn set(&mut self, keys: &[&str]) -> io::Result<Self::Writer>;
+}
+
+/// Returned on a successful cache get operation.
+pub struct CacheHit<'a, Reader: Read> {
+    /// Cache key that was hit.
+    pub key: &'a str,
+
+    /// Reader for the cached data.
+    pub reader: Reader,
 }

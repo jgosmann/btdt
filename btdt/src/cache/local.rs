@@ -2,7 +2,7 @@
 
 use super::blob_id::{BlobId, BlobIdFactory};
 use super::meta::{Meta, META_MAX_SIZE};
-use super::Cache;
+use super::{Cache, CacheHit};
 use crate::storage::{EntryType, Storage};
 use crate::util::clock::{Clock, SystemClock};
 use crate::util::close::Close;
@@ -38,7 +38,7 @@ use std::pin::Pin;
 /// writer.write_all(b"Hello, world!")?;
 /// writer.close()?;
 /// let mut buf = String::new();
-/// cache.get(&["foo", "cache-key"])?.unwrap().read_to_string(&mut buf)?;
+/// cache.get(&["foo", "cache-key"])?.unwrap().reader.read_to_string(&mut buf)?;
 /// assert_eq!(buf, "Hello, world!");
 /// # Ok(())
 /// # }
@@ -99,7 +99,7 @@ impl<S: Storage, C: Clock> Cache for LocalCache<S, C> {
     type Reader = S::Reader;
     type Writer = CacheWriter<S, AlignedVec>;
 
-    fn get(&self, keys: &[&str]) -> io::Result<Option<Self::Reader>> {
+    fn get<'a>(&self, keys: &[&'a str]) -> io::Result<Option<CacheHit<'a, Self::Reader>>> {
         for key in keys {
             let meta_path = Self::meta_path(key);
             let meta = self.read_meta(&meta_path);
@@ -112,7 +112,7 @@ impl<S: Storage, C: Clock> Cache for LocalCache<S, C> {
 
                     let blob_path = Self::blob_path(meta.blob_id());
                     match self.storage.borrow().get(&blob_path) {
-                        Ok(reader) => return Ok(Some(reader)),
+                        Ok(reader) => return Ok(Some(CacheHit { key, reader })),
                         Err(err) => match err.kind() {
                             ErrorKind::NotFound => continue,
                             _ => return Err(err),
@@ -326,7 +326,7 @@ mod tests {
     use super::*;
     use crate::storage::in_memory::InMemoryStorage;
     use crate::util::clock::test_fakes::ControlledClock;
-    use chrono::{DateTime, TimeDelta};
+    use chrono::TimeDelta;
 
     #[test]
     fn test_returns_none_for_non_existent_keys() {
@@ -340,7 +340,7 @@ mod tests {
         let storage = InMemoryStorage::new();
         let mut cache = LocalCache::new(storage);
         cache_entry_with_content(&mut cache, &["key"], "Hello, world!").unwrap();
-        assert_cache_entry_with_content(&cache, &["key"], "Hello, world!");
+        assert_cache_entry_with_content(&cache, &["key"], "key", "Hello, world!");
     }
 
     #[test]
@@ -352,7 +352,7 @@ mod tests {
         cache_entry_with_content(&mut cache, &keys, "Hello, world!").unwrap();
 
         for key in keys {
-            assert_cache_entry_with_content(&cache, &[key], "Hello, world!");
+            assert_cache_entry_with_content(&cache, &[key], key, "Hello, world!");
         }
     }
 
@@ -367,6 +367,7 @@ mod tests {
         assert_cache_entry_with_content(
             &cache,
             &["non-existent-key", "actual-key", "ignored-key"],
+            "actual-key",
             "Hello, world!",
         );
     }
@@ -380,7 +381,7 @@ mod tests {
         cache_entry_with_content(&mut cache, &["key"], "Hello, world!").unwrap();
 
         clock.advance_by(TimeDelta::days(1));
-        let mut reader = cache.get(&["key"]).unwrap().unwrap();
+        let mut reader = cache.get(&["key"]).unwrap().unwrap().reader;
         reader.read_to_string(&mut String::new()).unwrap();
 
         let storage = cache.into_storage();
@@ -402,7 +403,7 @@ mod tests {
 
         cache.clean(None, None).unwrap();
 
-        assert_cache_entry_with_content(&cache, &["key"], "Hello, world!");
+        assert_cache_entry_with_content(&cache, &["key"], "key", "Hello, world!");
     }
 
     #[test]
@@ -419,7 +420,7 @@ mod tests {
         cache.clean(Some(TimeDelta::days(2)), None).unwrap();
 
         assert_no_cache_entry(&cache, &["old"]);
-        assert_cache_entry_with_content(&cache, &["new"], "Goodbye, world!");
+        assert_cache_entry_with_content(&cache, &["new"], "new", "Goodbye, world!");
 
         let storage = cache.into_storage();
         assert_blob_count(&storage, 1);
@@ -437,8 +438,8 @@ mod tests {
         cache.get(&["new"]).unwrap().unwrap();
         cache.clean(Some(TimeDelta::days(1)), None).unwrap();
 
-        assert_cache_entry_with_content(&cache, &["old"], "Hello, world!");
-        assert_cache_entry_with_content(&cache, &["new"], "Hello, world!");
+        assert_cache_entry_with_content(&cache, &["old"], "old", "Hello, world!");
+        assert_cache_entry_with_content(&cache, &["new"], "new", "Hello, world!");
     }
 
     #[test]
@@ -466,8 +467,8 @@ mod tests {
             &cache,
             &["3-days-old", "3-days-old-alternate-key", "2-days-old"],
         );
-        assert_cache_entry_with_content(&cache, &["1-day-old"], "0123456789");
-        assert_cache_entry_with_content(&cache, &["0-days-old"], "0123456789");
+        assert_cache_entry_with_content(&cache, &["1-day-old"], "1-day-old", "0123456789");
+        assert_cache_entry_with_content(&cache, &["0-days-old"], "0-days-old", "0123456789");
 
         let storage = cache.into_storage();
         assert_blob_count(&storage, 2);
@@ -496,7 +497,7 @@ mod tests {
         cache_entry_with_content(&mut cache, &["key1"], "fallback").unwrap();
 
         assert!(cache.get(&["key0"]).unwrap().is_none());
-        assert_cache_entry_with_content(&cache, &["key0", "key1"], "fallback");
+        assert_cache_entry_with_content(&cache, &["key0", "key1"], "key1", "fallback");
     }
 
     fn cache_entry_with_content<C: Cache>(
@@ -509,11 +510,21 @@ mod tests {
         writer.close()
     }
 
-    fn assert_cache_entry_with_content<C: Cache>(cache: &C, keys: &[&str], content: &str) {
-        let mut reader = cache
+    fn assert_cache_entry_with_content<C: Cache>(
+        cache: &C,
+        keys: &[&str],
+        matched_key: &str,
+        content: &str,
+    ) {
+        let CacheHit { key, mut reader } = cache
             .get(keys)
             .expect("IO failure getting cache entry")
             .expect("cache entry not found");
+        assert_eq!(
+            key, matched_key,
+            "expected cache key '{}' to be restored, not '{}'",
+            matched_key, key
+        );
         let mut buf = String::new();
         reader
             .read_to_string(&mut buf)
