@@ -16,6 +16,7 @@ fn test_cmd() {
         "restore-first-matched-key-comma-separated.in",
         "restore-non-existent-key.in",
         "restore-primary-key.in",
+        "restore-success-rc-on-any-key.in",
     ] {
         cache_fixture
             .copy_to(PathBuf::from("tests/cli").join(test_dir).join("cache"))

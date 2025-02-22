@@ -71,6 +71,13 @@ enum Commands {
 
         /// Directory to restore the files to.
         destination_dir: PathBuf,
+
+        /// Exit with success status code if any key is found in the cache.
+        ///
+        /// Usually, the success exit code is only returned if the primary key (i.e. first listed
+        /// key) is found in the cache, and 3 is returned if another key was restored.
+        #[arg(long, action)]
+        success_rc_on_any_key: bool,
     },
 
     /// Store files in the cache.
@@ -178,6 +185,7 @@ fn main() -> Result<ExitCode, anyhow::Error> {
         Commands::Restore {
             entries_ref,
             destination_dir,
+            success_rc_on_any_key,
         } => {
             if let Some(restored_key) = entries_ref
                 .to_pipeline()?
@@ -186,7 +194,7 @@ fn main() -> Result<ExitCode, anyhow::Error> {
             {
                 println!("Restored key {}", restored_key);
                 let primary_key = entries_ref.keys.first().map(String::as_str);
-                if Some(restored_key) != primary_key {
+                if !success_rc_on_any_key && Some(restored_key) != primary_key {
                     return Ok(ExitCode::from(3));
                 }
             } else {
