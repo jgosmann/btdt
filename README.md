@@ -21,7 +21,8 @@ Examples for specific CI platforms can be found in the documentation (see below)
 
 ## Documentation
 
-tbd
+The main user guide and documentation is located at [https://jgosmann.github.io/btdt](https://jgosmann.github.io/btdt).
+The API documentation is found on [docs.rs](https://docs.rs/btdt/latest/btdt/)
 
 ## Motivation
 
