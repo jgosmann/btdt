@@ -171,7 +171,8 @@ fi
 </code></pre>
 <p>Examples for specific CI platforms can be found in the documentation (see below).</p>
 <h2 id="documentation"><a class="header" href="#documentation">Documentation</a></h2>
-<p>tbd</p>
+<p>The main user guide and documentation is located at <a href="https://jgosmann.github.io/btdt">https://jgosmann.github.io/btdt</a>.
+The API documentation is found on <a href="https://docs.rs/btdt/latest/btdt/">docs.rs</a></p>
 <h2 id="motivation"><a class="header" href="#motivation">Motivation</a></h2>
 <p>I was annoyed that there isn't a good (self-hosted) caching solution for Jenkins and Tekton, similar to the
 cache for GitHub Actions.
@@ -213,10 +214,12 @@ You might want to place it in your <code>$PATH</code> for easy access.</p>
 <h2 id="docker-images"><a class="header" href="#docker-images">Docker images</a></h2>
 <p>Docker images are available on <a href="https://hub.docker.com/r/jgosmann/btdt">Docker Hub</a>.
 This allows to directly run <code>btdt</code> without installing it on your system:</p>
-<pre><code class="language-sh">docker run gosmannj/btdt btdt --help
+<pre><code class="language-sh">docker run jgosmann/btdt btdt --help
 </code></pre>
 <p>However, you will have to mount the directories with the cache and the files to cache into the container.
 This can be done with the <a href="https://docs.docker.com/engine/storage/volumes/#syntax"><code>--mount</code> or <code>--volume</code> option</a>.</p>
+<p>The images use Semantic Versioning tags. For example, <code>jgosmann/btdt:0.1</code>
+refers to the latest <code>v0.1.x</code> image.</p>
 <h2 id="build-from-source-using-rust"><a class="header" href="#build-from-source-using-rust">Build from source using Rust</a></h2>
 <p>If you have Rust installed, you can build <code>btdt</code> from source using <code>cargo</code>:</p>
 <pre><code class="language-sh">cargo install btdt
