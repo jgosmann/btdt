@@ -20,7 +20,7 @@ Docker images are available on [Docker Hub](https://hub.docker.com/r/jgosmann/bt
 This allows to directly run `btdt` without installing it on your system:
 
 ```sh
-docker run gosmannj/btdt btdt --help
+docker run jgosmann/btdt btdt --help
 ```
 
 However, you will have to mount the directories with the cache and the files to cache into the container.
