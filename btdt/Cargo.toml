@@ -1,6 +1,6 @@
 [package]
 name = "btdt"
-version = "0.1.0-pre.0"
+version = "0.1.0"
 edition = "2021"
 authors = ["Jan Gosmann"]
 description = "\"been there, done that\" - a tool for flexible CI caching"
