@@ -2,7 +2,7 @@
 //!
 //! You are reading the library API documentation. If you are not looking to integrate `btdt` into
 //! your own Rust project, but to use it your CI pipelines, you probably want to read the
-//! CLI documentation (TODO).
+//! [user guide](https://jgosmann.github.io/btdt/).
 //!
 //! `btdt` makes use of three main concepts:
 //!
