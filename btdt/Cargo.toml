@@ -1,7 +1,13 @@
 [package]
 name = "btdt"
-version = "0.1.0"
+version = "0.1.0-pre.0"
 edition = "2021"
+authors = ["Jan Gosmann"]
+description = "\"been there, done that\" - a tool for flexible CI caching"
+repository = "https://github.com/jgosmann/btdt"
+license = "MIT OR Apache-2.0"
+keywords = ["ci", "cache", "tekton"]
+categories = ["caching"]
 
 [dependencies]
 blake3 = "1.5.5"

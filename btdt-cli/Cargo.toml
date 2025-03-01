@@ -1,8 +1,15 @@
 [package]
 name = "btdt-cli"
-version = "0.1.0"
+version = "0.1.0-pre.0"
 edition = "2021"
 default-run = "btdt"
+authors = ["Jan Gosmann"]
+documentation = "https://jgosmann.github.io/btdt/"
+description = "\"been there, done that\" - a tool for flexible CI caching"
+repository = "https://github.com/jgosmann/btdt"
+license = "MIT OR Apache-2.0"
+keywords = ["ci", "cache", "tekton", "cli"]
+categories = ["caching", "command-line-utilities"]
 
 [[bin]]
 name = "btdt"
