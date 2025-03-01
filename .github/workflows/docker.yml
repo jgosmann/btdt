@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag `vX.Y.Z` to build a Docker image for.'
+        description: 'Version tag `btdt-cli-vX.Y.Z` to build a Docker image for.'
         required: true
 
 env:
@@ -22,7 +22,7 @@ jobs:
     steps:
       - name: Set version from ref
         id: version
-        run: REF=${{ inputs.version || github.event.release.tag_name }}; TAG=${REF#refs/*/}; echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+        run: REF=${{ inputs.version || github.event.release.tag_name }}; TAG=${REF#refs/*/}; TAG=${TAG#btdt-cli-}; echo "version=${TAG#v}" >> $GITHUB_OUTPUT
 
       - name: Checkout repository
         uses: actions/checkout@v4
