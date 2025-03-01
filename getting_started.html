@@ -181,7 +181,8 @@ RESTORE_EXIT_CODE=$?
 </code></pre>
 <p><code>npm</code> will install the dependencies into <code>node_modules</code>, so we are using this as the target directory.
 Furthermore, we will store the exit code because it comes in handy in the next step. It will be <code>0</code> if the cache was
-restored successfully, and non-zero otherwise.</p>
+restored successfully from the first given key, and non-zero otherwise. (Use the <code>--success-rc-on-any-key</code> flag to
+return a zero exit code no matter the key that was used to restore the cache.)</p>
 <h2 id="installing-dependencies-and-storing-the-cache"><a class="header" href="#installing-dependencies-and-storing-the-cache">Installing dependencies and storing the cache</a></h2>
 <p>If the cache could not be restored, we will install the dependencies with <code>npm ci</code>, and then store the installed
 dependencies in the cache:</p>
