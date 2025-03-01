@@ -43,6 +43,18 @@ Regarding Jenkins, I know of two caching plugins and I have my quarrels with bot
 - [jenkins-pipeline-cache-plugin](https://github.com/j3t/jenkins-pipeline-cache-plugin) requires S3 API compatible
   storage, which excludes some other use cases. It also doesn't seem to provide a way to limit the cache size.
 
+Regarding
+Tekton, [a few suggestions are made in their blog](https://tekton.dev/blog/2023/11/02/speeding-up-container-image-builds-in-tekton-pipelines/#caching-dependencies-on-a-persistent-disk).
+But I don't think those are perfect:
+
+- Caching layers in a container registry imposes a dependency order on your cached layers. This might be fine, if
+  invalidating one cache/layer, implies that all subsequent caches/layers are also invalidated. But if you have two
+  orthogonal caches, you must decide for an order, and always have one case where one of the caches might be invalidated
+  needlessly.
+- Caching on a persistent disk does not, as far as I understand, allow for multiple caches to be stored without
+  additional tooling. If you have builds that require different caches, you might end up overwriting caches constantly.
+  `btdt` provides tooling to have multiple separate caches.
+
 ## State of development
 
 A basic version of `btdt` that can be used in some scenarios is working.
