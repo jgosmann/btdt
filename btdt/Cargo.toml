@@ -8,6 +8,7 @@ repository = "https://github.com/jgosmann/btdt"
 license = "MIT OR Apache-2.0"
 keywords = ["ci", "cache", "tekton"]
 categories = ["caching"]
+readme = "../README.md"
 
 [dependencies]
 blake3 = "1.5.5"

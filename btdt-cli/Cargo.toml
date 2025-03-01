@@ -10,6 +10,7 @@ repository = "https://github.com/jgosmann/btdt"
 license = "MIT OR Apache-2.0"
 keywords = ["ci", "cache", "tekton", "cli"]
 categories = ["caching", "command-line-utilities"]
+readme = "../README.md"
 
 [[bin]]
 name = "btdt"
