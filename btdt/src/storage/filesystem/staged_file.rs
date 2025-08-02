@@ -61,10 +61,7 @@ impl<P: AsRef<Path>> StagedFile<P> {
                 finalized: false,
             });
         }
-        Err(io::Error::new(
-            ErrorKind::Other,
-            "Failed to create and lock temporary file",
-        ))
+        Err(io::Error::other("Failed to create and lock temporary file"))
     }
 
     fn finalize(&mut self) -> io::Result<()> {
