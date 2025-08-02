@@ -6,6 +6,8 @@ use std::fmt::{Debug, Display, Formatter};
 pub struct BtdtServerConfig {
     pub bind_addrs: Vec<String>,
     pub enable_api_docs: bool,
+    pub tls_keystore: String,
+    pub tls_keystore_password: String,
 }
 
 impl BtdtServerConfig {
@@ -70,6 +72,8 @@ impl ConfigLoader {
         self.0
             .set_default("bind_addrs", vec!["0.0.0.0:8707".to_string()])?
             .set_default("enable_api_docs", true)?
+            .set_default("tls_keystore", "".to_string())?
+            .set_default("tls_keystore_password", "".to_string())?
             .build()?
             .try_deserialize()
             .map_err(LoadConfigError::from)
@@ -89,6 +93,8 @@ mod tests {
             BtdtServerConfig {
                 bind_addrs: vec!["0.0.0.0:8707".to_string()],
                 enable_api_docs: true,
+                tls_keystore: "".to_string(),
+                tls_keystore_password: "".to_string(),
             }
         )
     }
@@ -98,6 +104,8 @@ mod tests {
         let config = "
             bind_addrs = ['127.0.0.1:8707', '[::1]:8707']
             enable_api_docs = false
+            tls_keystore = 'path/certificate.p12'
+            tls_keystore_password = 'password'
         ";
         let file = File::from_str(config, FileFormat::Toml);
         let parsed_config = ConfigLoader::new().add_file_source(file).load().unwrap();
@@ -106,6 +114,8 @@ mod tests {
             BtdtServerConfig {
                 bind_addrs: vec!["127.0.0.1:8707".to_string(), "[::1]:8707".to_string()],
                 enable_api_docs: false,
+                tls_keystore: "path/certificate.p12".to_string(),
+                tls_keystore_password: "password".to_string()
             }
         );
     }
@@ -118,6 +128,14 @@ mod tests {
                 "127.0.0.1:8707,[::1]:8707".to_string(),
             ),
             ("BTDT_ENABLE_API_DOCS".to_string(), "false".to_string()),
+            (
+                "BTDT_TLS_KEYSTORE".to_string(),
+                "path/certificate.p12".to_string(),
+            ),
+            (
+                "BTDT_TLS_KEYSTORE_PASSWORD".to_string(),
+                "password".to_string(),
+            ),
         ]);
         let parsed_config = ConfigLoader::new()
             .add_environment_source(Some(env))
@@ -128,6 +146,8 @@ mod tests {
             BtdtServerConfig {
                 bind_addrs: vec!["127.0.0.1:8707".to_string(), "[::1]:8707".to_string()],
                 enable_api_docs: false,
+                tls_keystore: "path/certificate.p12".to_string(),
+                tls_keystore_password: "password".to_string(),
             }
         );
     }

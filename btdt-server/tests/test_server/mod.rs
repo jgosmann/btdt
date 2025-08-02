@@ -1,9 +1,13 @@
 use reqwest::blocking::{Client, RequestBuilder};
-use reqwest::Url;
+use reqwest::{Certificate, Url};
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command};
 use std::time::{Duration, Instant};
+
+#[allow(unused)]
+pub static CERTIFICATE_PKCS12: &[u8] = include_bytes!("../tls/leaf.p12");
+pub static CERTIFICATE_PEM: &[u8] = include_bytes!("../tls/ca.pem");
 
 pub struct BtdtTestServer {
     process: Child,
@@ -19,21 +23,26 @@ impl Default for BtdtTestServer {
 
 impl BtdtTestServer {
     pub fn new(env: &BTreeMap<String, String>) -> Self {
-        static BIND_ADDR: &str = "127.0.0.1:8747";
+        static BIND_ADDR: &str = "127.0.0.1:8707";
         let mut command = Command::new(env!("CARGO_BIN_EXE_btdt-server"));
         command.env("BTDT_BIND_ADDRS", BIND_ADDR);
         for (key, value) in env {
             command.env(key, value);
         }
-        let process = command
-            .stdout(Stdio::piped())
-            .spawn()
-            .expect("failed to start btdt-server");
+        let process = command.spawn().expect("failed to start btdt-server");
+        let tls_enabled = env.contains_key("BTDT_TLS_KEYSTORE");
         Self {
             process,
-            client: Client::new(),
-            base_url: Url::parse(&format!("http://{BIND_ADDR}"))
-                .expect("bind address did not form a valid URL"),
+            client: Client::builder()
+                .add_root_certificate(Certificate::from_pem(CERTIFICATE_PEM).unwrap())
+                .use_rustls_tls()
+                .build()
+                .unwrap(),
+            base_url: Url::parse(&format!(
+                "http{}://{BIND_ADDR}",
+                if tls_enabled { "s" } else { "" }
+            ))
+            .expect("bind address did not form a valid URL"),
         }
     }
 }

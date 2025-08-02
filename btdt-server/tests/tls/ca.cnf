@@ -1,0 +1,27 @@
+[ ca ]
+default_ca = CA_test
+
+[ CA_test ]
+dir               = .
+private_key       = $dir/ca.key
+certificate       = $dir/ca.pem
+database          = $dir/index.txt
+serial            = $dir/serial
+new_certs_dir     = $dir
+default_md        = sha256
+policy            = policy_loose
+x509_extensions   = v3_ca
+
+[ policy_loose ]
+commonName             = supplied
+stateOrProvinceName    = optional
+countryName            = optional
+emailAddress           = optional
+organizationName       = optional
+organizationalUnitName = optional
+
+[ v3_ca ]
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always
+basicConstraints = critical, CA:true
+keyUsage = critical, keyCertSign, cRLSign

@@ -5,13 +5,14 @@ edition = "2021"
 
 [dependencies]
 config = { version = "0.15.13", features = ["toml"] }
-poem = "3"
+poem = { version = "3", features = ["native-tls"] }
 poem-openapi = { version = "5", features = ["swagger-ui"] }
 serde = "1.0.219"
 tokio = { version = "1.47.1", features = ["rt-multi-thread"] }
 
 [dev-dependencies]
 poem = { version = "3", features = ["test"] }
-reqwest = { version = "0.12.22", features = ["blocking"] }
+reqwest = { version = "0.12.22", features = ["blocking", "rustls-tls"] }
 serial_test = "3.2.0"
+tempfile = "3.15.0"
 tokio = { version = "1.47.1", features = ["rt-multi-thread"] }
