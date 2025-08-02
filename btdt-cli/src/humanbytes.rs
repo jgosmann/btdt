@@ -12,9 +12,9 @@ pub enum ParserError {
 impl Display for ParserError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ParserError::ParseIntError(e) => write!(f, "Failed to parse integer: {}", e),
+            ParserError::ParseIntError(e) => write!(f, "Failed to parse integer: {e}"),
             ParserError::InvalidUnitPrefix(prefix) => {
-                write!(f, "Invalid unit prefix: '{}'", prefix)
+                write!(f, "Invalid unit prefix: '{prefix}'")
             }
             ParserError::OnlyWhitespace => write!(f, "Input consists only of whitespace"),
         }

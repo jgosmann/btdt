@@ -192,7 +192,7 @@ fn main() -> Result<ExitCode, anyhow::Error> {
                 .restore(&entries_ref.keys(), &destination_dir)
                 .with_context(|| format!("Could not restore to: {}", destination_dir.display()))?
             {
-                println!("Restored key {}", restored_key);
+                println!("Restored key {restored_key}");
                 let primary_key = entries_ref.keys.first().map(String::as_str);
                 if !success_rc_on_any_key && Some(restored_key) != primary_key {
                     return Ok(ExitCode::from(3));

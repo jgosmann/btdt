@@ -91,7 +91,7 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
         // Use a hash of the key to avoid too many files in a single directory
         let hash =
             ICASE_NOPAD_ALPHANUMERIC_ENCODING.encode(&blake3::hash(key.as_bytes()).as_bytes()[..1]);
-        format!("/meta/{}/{}", hash, key)
+        format!("/meta/{hash}/{key}")
     }
 }
 
@@ -182,7 +182,7 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
                 let meta = self.read_meta(&key_file.path)?;
                 let latest_access = meta
                     .latest_access()
-                    .map_err(|err| io::Error::new(ErrorKind::InvalidData, format!("{:?}", err)))?;
+                    .map_err(|err| io::Error::new(ErrorKind::InvalidData, format!("{err:?}")))?;
                 if let Some(&size) = blob_sizes.get(meta.blob_id()) {
                     let entry = blobs.entry(*meta.blob_id()).or_insert_with(|| Blob {
                         latest_access: Reverse(latest_access),
@@ -236,7 +236,7 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
         let mut meta_data = [0u8; META_MAX_SIZE];
         reader.read_exact(meta_data.as_mut())?;
         Meta::from_bytes(meta_data)
-            .map_err(|err| io::Error::new(ErrorKind::InvalidData, format!("{:?}", err)))
+            .map_err(|err| io::Error::new(ErrorKind::InvalidData, format!("{err:?}")))
     }
 
     fn iter_subdir_files<'a>(

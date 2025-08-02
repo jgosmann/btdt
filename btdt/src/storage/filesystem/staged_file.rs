@@ -42,7 +42,7 @@ impl<P: AsRef<Path>> StagedFile<P> {
             .ok_or(io::Error::new(ErrorKind::InvalidInput, "Invalid filename"))?;
         let tmp_path = target_path
             .as_ref()
-            .with_file_name(format!("{}.tmp.{}", filename, suffix));
+            .with_file_name(format!("{filename}.tmp.{suffix}"));
         for _ in 0..5 {
             let file = OpenOptions::new()
                 .create_new(true)

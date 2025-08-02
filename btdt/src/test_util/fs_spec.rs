@@ -160,7 +160,7 @@ impl Node for DirSpec {
                     if !self.children.contains_key(file_name) {
                         mismatches.push(ComparisonMismatch::new(
                             dir.path(),
-                            format!("additional file: '{}'", file_name),
+                            format!("additional file: '{file_name}'"),
                         ));
                     }
                 }
