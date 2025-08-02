@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+config = { version = "0.15.13", features = ["toml"] }
 poem = "3"
 poem-openapi = { version = "5", features = ["swagger-ui"] }
+serde = "1.0.219"
 tokio = { version = "1.47.1", features = ["rt-multi-thread"] }
 
 [dev-dependencies]

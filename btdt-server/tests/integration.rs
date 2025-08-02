@@ -4,6 +4,8 @@ use std::fmt::{Debug, Display, Formatter};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
+static TEST_SERVER_BIND_ADDR: &str = "127.0.0.1:8707";
+
 struct BtdtTestServer {
     process: Child,
     client: Client,
@@ -12,6 +14,7 @@ struct BtdtTestServer {
 impl BtdtTestServer {
     pub fn new() -> Self {
         let process = Command::new(env!("CARGO_BIN_EXE_btdt-server"))
+            .env("BTDT_BIND_ADDRS", TEST_SERVER_BIND_ADDR)
             .stdout(Stdio::piped())
             .spawn()
             .expect("failed to start btdt-server");
@@ -40,7 +43,7 @@ impl Drop for BtdtTestServer {
 
 impl BtdtTestServer {
     pub fn get(&self, path: &str) -> RequestBuilder {
-        let url = Url::parse("http://127.0.0.1:8707")
+        let url = Url::parse(&format!("http://{TEST_SERVER_BIND_ADDR}"))
             .unwrap()
             .join(path)
             .expect("Invalid path");
