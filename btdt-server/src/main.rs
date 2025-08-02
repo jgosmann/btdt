@@ -1,3 +1,4 @@
+use crate::app::Options;
 use config::Config;
 use poem::listener::{BoxListener, Listener};
 use poem::{listener::TcpListener, Server};
@@ -7,13 +8,14 @@ mod app;
 #[derive(Clone, Debug, serde::Deserialize)]
 struct BtdtServerConfig {
     bind_addrs: Vec<String>,
+    enable_api_docs: bool,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let settings: BtdtServerConfig = Config::builder()
-        .set_default("bind_addrs", vec!["0.0.0.0:8707".to_string()])
-        .unwrap()
+        .set_default("bind_addrs", vec!["0.0.0.0:8707".to_string()])?
+        .set_default("enable_api_docs", true)?
         .add_source(config::File::with_name("/etc/btdt-server").required(false))
         .add_source(
             config::Environment::with_prefix("BTDT")
@@ -34,6 +36,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .reduce(|a, b| a.combine(b).boxed())
         .ok_or("No bind addresses provided")?;
-    Server::new(listener).run(app::create_route()).await?;
+    Server::new(listener)
+        .run(app::create_route(
+            Options::builder()
+                .enable_api_docs(settings.enable_api_docs)
+                .build(),
+        ))
+        .await?;
     Ok(())
 }
