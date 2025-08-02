@@ -4,12 +4,14 @@ use poem_openapi::{OpenApi, OpenApiService};
 pub struct Api;
 
 pub fn create_openapi_service() -> OpenApiService<Api, ()> {
-    OpenApiService::new(Api, "btdt server API", "1.0")
+    OpenApiService::new(Api, "btdt server API", "0.1")
 }
 
 #[OpenApi]
 impl Api {
     /// Health check endpoint
+    ///
+    /// Returns a simple "OK" response to indicate that the server is running.
     #[oai(path = "/health", method = "get")]
     async fn health(&self) -> PlainText<String> {
         PlainText("OK".to_string())
