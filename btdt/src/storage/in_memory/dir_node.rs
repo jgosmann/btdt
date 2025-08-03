@@ -2,12 +2,12 @@ use super::file_node::{FileNode, FileWriter};
 use std::collections::HashMap;
 use std::io;
 use std::io::ErrorKind;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub enum Node {
     Dir(DirNode),
-    File(Rc<FileNode>),
+    File(Arc<FileNode>),
 }
 
 #[derive(Debug, Clone)]
@@ -67,10 +67,10 @@ impl DirNode {
             .entry(name)
             .and_modify(|node| {
                 if let Node::File(_) = node {
-                    *node = Node::File(Rc::new(FileNode::new()));
+                    *node = Node::File(Arc::new(FileNode::new()));
                 }
             })
-            .or_insert(Node::File(Rc::new(FileNode::new())));
+            .or_insert(Node::File(Arc::new(FileNode::new())));
         match node {
             Node::File(file) => Ok(file.writer()),
             Node::Dir(_) => Err(io::Error::new(

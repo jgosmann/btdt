@@ -1,11 +1,10 @@
-use std::cell::RefCell;
 use std::io;
 use std::io::{Read, Write};
-use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct FileNode {
-    content: RefCell<Vec<u8>>,
+    content: RwLock<Vec<u8>>,
 }
 
 impl FileNode {
@@ -13,48 +12,48 @@ impl FileNode {
         Self::default()
     }
 
-    pub fn reader(self: &Rc<FileNode>) -> FileReader {
-        FileReader::new(Rc::clone(self))
+    pub fn reader(self: &Arc<FileNode>) -> FileReader {
+        FileReader::new(Arc::clone(self))
     }
 
-    pub fn writer(self: &Rc<FileNode>) -> FileWriter {
-        FileWriter::new(Rc::clone(self))
+    pub fn writer(self: &Arc<FileNode>) -> FileWriter {
+        FileWriter::new(Arc::clone(self))
     }
 
     pub fn size(&self) -> usize {
-        self.content.borrow().len()
+        self.content.read().unwrap().len()
     }
 }
 
 #[derive(Debug)]
 pub struct FileWriter {
-    file_node: Rc<FileNode>,
+    file_node: Arc<FileNode>,
 }
 
 impl FileWriter {
-    fn new(file_node: Rc<FileNode>) -> Self {
+    fn new(file_node: Arc<FileNode>) -> Self {
         FileWriter { file_node }
     }
 }
 
 impl Write for FileWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.file_node.content.borrow_mut().write(buf)
+        self.file_node.content.write().unwrap().write(buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.file_node.content.borrow_mut().flush()
+        self.file_node.content.write().unwrap().flush()
     }
 }
 
 #[derive(Debug)]
 pub struct FileReader {
-    file_node: Rc<FileNode>,
+    file_node: Arc<FileNode>,
     offset: usize,
 }
 
 impl FileReader {
-    fn new(file_node: Rc<FileNode>) -> Self {
+    fn new(file_node: Arc<FileNode>) -> Self {
         FileReader {
             file_node,
             offset: 0,
@@ -64,7 +63,7 @@ impl FileReader {
 
 impl Read for FileReader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let content = self.file_node.content.borrow();
+        let content = self.file_node.content.read().unwrap();
         if buf.is_empty() {
             return Ok(0);
         }
