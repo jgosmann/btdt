@@ -38,7 +38,7 @@ pub trait Storage {
     fn delete(&mut self, path: &str) -> io::Result<()>;
 
     /// Checks if a file exists at the given path.
-    fn exists_file(&mut self, path: &str) -> io::Result<bool>;
+    fn exists_file(&self, path: &str) -> io::Result<bool>;
 
     /// Returns a reader for the file at the given path.
     fn get(&self, path: &str) -> io::Result<Self::Reader>;

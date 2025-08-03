@@ -95,7 +95,7 @@ impl Storage for FilesystemStorage {
         File::open(self.canonical_path(path)?)
     }
 
-    fn exists_file(&mut self, path: &str) -> io::Result<bool> {
+    fn exists_file(&self, path: &str) -> io::Result<bool> {
         Ok(self.canonical_path(path)?.is_file())
     }
 
@@ -200,7 +200,7 @@ mod tests {
             self.storage.get(path)
         }
 
-        fn exists_file(&mut self, path: &str) -> io::Result<bool> {
+        fn exists_file(&self, path: &str) -> io::Result<bool> {
             self.storage.exists_file(path)
         }
 

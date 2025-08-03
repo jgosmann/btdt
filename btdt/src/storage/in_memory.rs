@@ -88,7 +88,7 @@ impl Storage for InMemoryStorage {
         ))
     }
 
-    fn exists_file(&mut self, path: &str) -> io::Result<bool> {
+    fn exists_file(&self, path: &str) -> io::Result<bool> {
         match self.get(path) {
             Ok(_) => Ok(true),
             Err(err) => match err.kind() {
