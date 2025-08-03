@@ -10,6 +10,8 @@ mod config;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("{} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+
     let settings = BtdtServerConfig::load()?;
     let mut listener: BoxListener = settings
         .bind_addrs
