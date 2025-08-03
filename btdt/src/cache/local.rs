@@ -9,7 +9,6 @@ use crate::util::close::Close;
 use crate::util::encoding::ICASE_NOPAD_ALPHANUMERIC_ENCODING;
 use chrono::{DateTime, TimeDelta, Utc};
 use rkyv::util::AlignedVec;
-use std::cell::{Ref, RefCell};
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
 use std::io;
@@ -44,7 +43,7 @@ use std::pin::Pin;
 /// # }
 /// ```
 pub struct LocalCache<S: Storage, C: Clock = SystemClock> {
-    storage: RefCell<S>,
+    storage: S,
     blob_id_factory: BlobIdFactory,
     clock: C,
 }
@@ -59,7 +58,7 @@ impl<S: Storage> LocalCache<S> {
     /// blob ID factory.
     pub fn with_blob_id_factory(storage: S, blob_id_factory: BlobIdFactory) -> Self {
         Self {
-            storage: RefCell::new(storage),
+            storage,
             blob_id_factory,
             clock: SystemClock,
         }
@@ -71,7 +70,7 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
     /// clock.
     pub(crate) fn with_clock(storage: S, clock: C) -> Self {
         Self {
-            storage: RefCell::new(storage),
+            storage,
             blob_id_factory: BlobIdFactory::default(),
             clock,
         }
@@ -79,7 +78,7 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
 
     /// Consumes the cache and returns the underlying storage.
     pub fn into_storage(self) -> S {
-        self.storage.into_inner()
+        self.storage
     }
 
     fn blob_path(blob_id: &BlobId) -> String {
@@ -106,12 +105,12 @@ impl<S: Storage, C: Clock> Cache for LocalCache<S, C> {
             match meta {
                 Ok(mut meta) => {
                     meta.set_latest_access(self.clock.now());
-                    let mut writer = self.storage.borrow_mut().put(&meta_path)?;
+                    let mut writer = self.storage.put(&meta_path)?;
                     writer.write_all(meta.deref().as_ref())?;
                     writer.close()?;
 
                     let blob_path = Self::blob_path(meta.blob_id());
-                    match self.storage.borrow().get(&blob_path) {
+                    match self.storage.get(&blob_path) {
                         Ok(reader) => return Ok(Some(CacheHit { key, reader })),
                         Err(err) => match err.kind() {
                             ErrorKind::NotFound => continue,
@@ -132,11 +131,11 @@ impl<S: Storage, C: Clock> Cache for LocalCache<S, C> {
         let blob_id = self.blob_id_factory.new_id();
         let meta = Meta::new(blob_id, self.clock.now());
         let blob_path = Self::blob_path(&blob_id);
-        let blob_writer = self.storage.borrow_mut().put(&blob_path)?;
+        let blob_writer = self.storage.put(&blob_path)?;
         let meta_writers = keys
             .iter()
             .map(|&key| Self::meta_path(key))
-            .map(|key| self.storage.borrow_mut().put(&key))
+            .map(|key| self.storage.put(&key))
             .collect::<io::Result<Vec<_>>>()?;
         Ok(CacheWriter::new(blob_writer, meta_writers, meta))
     }
@@ -153,16 +152,13 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
         }
 
         let mut blob_sizes = HashMap::new();
-        {
-            let storage = self.storage.borrow();
-            for blob in Self::iter_subdir_files(&storage, "/blob")? {
-                let blob = blob?;
-                if let Ok(blob_id) = ICASE_NOPAD_ALPHANUMERIC_ENCODING
-                    .decode(format!("{}{}", blob.subdir, blob.name).as_bytes())
-                {
-                    let blob_id: BlobId = blob_id.try_into().unwrap();
-                    blob_sizes.insert(blob_id, blob.size);
-                }
+        for blob in Self::iter_subdir_files(&self.storage, "/blob")? {
+            let blob = blob?;
+            if let Ok(blob_id) = ICASE_NOPAD_ALPHANUMERIC_ENCODING
+                .decode(format!("{}{}", blob.subdir, blob.name).as_bytes())
+            {
+                let blob_id: BlobId = blob_id.try_into().unwrap();
+                blob_sizes.insert(blob_id, blob.size);
             }
         }
 
@@ -175,25 +171,21 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
         }
         let mut blobs: HashMap<BlobId, Blob> = HashMap::new();
 
-        {
-            let storage = self.storage.borrow();
-            for key_file in Self::iter_subdir_files(&storage, "/meta")? {
-                let key_file = key_file?;
-                let meta = self.read_meta(&key_file.path)?;
-                let latest_access = meta
-                    .latest_access()
-                    .map_err(|err| io::Error::new(ErrorKind::InvalidData, format!("{err:?}")))?;
-                if let Some(&size) = blob_sizes.get(meta.blob_id()) {
-                    let entry = blobs.entry(*meta.blob_id()).or_insert_with(|| Blob {
-                        latest_access: Reverse(latest_access),
-                        size,
-                        blob_id: *meta.blob_id(),
-                        keys: vec![],
-                    });
-                    entry.keys.push(key_file.name.to_string());
-                    entry.latest_access =
-                        Reverse(std::cmp::max(entry.latest_access.0, latest_access));
-                }
+        for key_file in Self::iter_subdir_files(&self.storage, "/meta")? {
+            let key_file = key_file?;
+            let meta = self.read_meta(&key_file.path)?;
+            let latest_access = meta
+                .latest_access()
+                .map_err(|err| io::Error::new(ErrorKind::InvalidData, format!("{err:?}")))?;
+            if let Some(&size) = blob_sizes.get(meta.blob_id()) {
+                let entry = blobs.entry(*meta.blob_id()).or_insert_with(|| Blob {
+                    latest_access: Reverse(latest_access),
+                    size,
+                    blob_id: *meta.blob_id(),
+                    keys: vec![],
+                });
+                entry.keys.push(key_file.name.to_string());
+                entry.latest_access = Reverse(std::cmp::max(entry.latest_access.0, latest_access));
             }
         }
 
@@ -220,11 +212,9 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
                 ..
             } = heap.pop().unwrap();
             for key in keys {
-                self.storage.borrow_mut().delete(&Self::meta_path(&key))?;
+                self.storage.delete(&Self::meta_path(&key))?;
             }
-            self.storage
-                .borrow_mut()
-                .delete(&Self::blob_path(&blob_id))?;
+            self.storage.delete(&Self::blob_path(&blob_id))?;
             blob_size_sum -= size;
         }
 
@@ -232,7 +222,7 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
     }
 
     fn read_meta(&self, path: &str) -> io::Result<Pin<Box<Meta<[u8; META_MAX_SIZE]>>>> {
-        let mut reader = self.storage.borrow().get(path)?;
+        let mut reader = self.storage.get(path)?;
         let mut meta_data = [0u8; META_MAX_SIZE];
         reader.read_exact(meta_data.as_mut())?;
         Meta::from_bytes(meta_data)
@@ -240,7 +230,7 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
     }
 
     fn iter_subdir_files<'a>(
-        storage: &'a Ref<S>,
+        storage: &'a S,
         path: &'a str,
     ) -> io::Result<impl Iterator<Item = io::Result<SubdirFile>> + use<'a, S, C>> {
         let path_entries = storage.list(path)?.collect::<io::Result<Vec<_>>>()?;
@@ -480,7 +470,7 @@ mod tests {
         let mut cache = LocalCache::new(storage);
         cache_entry_with_content(&mut cache, &["key0"], "cached content").unwrap();
 
-        let mut storage = cache.into_storage();
+        let storage = cache.into_storage();
         let mut to_delete = Vec::new();
         for subdir in storage.list("/blob").unwrap() {
             let subdir = subdir.unwrap();
