@@ -201,7 +201,7 @@ mod tests {
         let tempdir = tempdir().unwrap();
         let target_path = tempdir.path().join("test.txt");
         {
-            let file = StagedFile::new(&target_path, &mut StdRng::seed_from_u64(0)).unwrap();
+            let _file = StagedFile::new(&target_path, &mut StdRng::seed_from_u64(0)).unwrap();
             clean_leftover_tmp_files(tempdir.path()).unwrap();
             assert!(tempdir.path().read_dir().unwrap().any(|entry| {
                 entry
