@@ -36,7 +36,7 @@ pub trait Cache {
     ///
     /// The writer must be finalized by calling [Close::close] to make the data available
     /// atomically.
-    fn set(&mut self, keys: &[&str]) -> io::Result<Self::Writer>;
+    fn set(&self, keys: &[&str]) -> io::Result<Self::Writer>;
 }
 
 /// Returned on a successful cache get operation.

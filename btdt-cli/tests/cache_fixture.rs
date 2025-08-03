@@ -1,4 +1,4 @@
-use btdt::cache::blob_id::BlobIdFactory;
+use btdt::cache::blob_id::{BlobIdFactory, SharedRng};
 use btdt::cache::local::LocalCache;
 use btdt::pipeline::Pipeline;
 use btdt::storage::filesystem::FilesystemStorage;
@@ -19,7 +19,7 @@ impl CacheFixture {
         let cache_dir = tempdir()?;
         let mut cache_pipeline = Pipeline::new(LocalCache::with_blob_id_factory(
             FilesystemStorage::new(cache_dir.path().to_path_buf()),
-            BlobIdFactory::new(StdRng::from_seed([0; 32])),
+            BlobIdFactory::<SharedRng<StdRng>>::new(SharedRng::new(StdRng::from_seed([0; 32]))),
         ));
 
         let tmp = tempdir()?;

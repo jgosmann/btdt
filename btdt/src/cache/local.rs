@@ -1,6 +1,6 @@
 //! Provides a local cache implementation that stores data in a storage backend.
 
-use super::blob_id::{BlobId, BlobIdFactory};
+use super::blob_id::{BlobId, BlobIdFactory, RngBytes, ThreadRng};
 use super::meta::{Meta, META_MAX_SIZE};
 use super::{Cache, CacheHit};
 use crate::storage::{EntryType, Storage};
@@ -42,21 +42,23 @@ use std::pin::Pin;
 /// # Ok(())
 /// # }
 /// ```
-pub struct LocalCache<S: Storage, C: Clock = SystemClock> {
+pub struct LocalCache<S: Storage, C: Clock = SystemClock, R: RngBytes = ThreadRng> {
     storage: S,
-    blob_id_factory: BlobIdFactory,
+    blob_id_factory: BlobIdFactory<R>,
     clock: C,
 }
-
-impl<S: Storage> LocalCache<S> {
+impl<S: Storage> LocalCache<S, SystemClock, ThreadRng> {
     /// Creates a new local cache that stores data in the given storage backend.
+    ///
     pub fn new(storage: S) -> Self {
         Self::with_clock(storage, SystemClock)
     }
+}
 
+impl<S: Storage, R: RngBytes> LocalCache<S, SystemClock, R> {
     /// Creates a new local cache that stores data in the given storage backend, using the given
     /// blob ID factory.
-    pub fn with_blob_id_factory(storage: S, blob_id_factory: BlobIdFactory) -> Self {
+    pub fn with_blob_id_factory(storage: S, blob_id_factory: BlobIdFactory<R>) -> Self {
         Self {
             storage,
             blob_id_factory,
@@ -65,7 +67,7 @@ impl<S: Storage> LocalCache<S> {
     }
 }
 
-impl<S: Storage, C: Clock> LocalCache<S, C> {
+impl<S: Storage, C: Clock> LocalCache<S, C, ThreadRng> {
     /// Creates a new local cache that stores data in the given storage backend, using the given
     /// clock.
     pub(crate) fn with_clock(storage: S, clock: C) -> Self {
@@ -75,7 +77,9 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
             clock,
         }
     }
+}
 
+impl<S: Storage, C: Clock, R: RngBytes> LocalCache<S, C, R> {
     /// Consumes the cache and returns the underlying storage.
     pub fn into_storage(self) -> S {
         self.storage
@@ -94,7 +98,7 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
     }
 }
 
-impl<S: Storage, C: Clock> Cache for LocalCache<S, C> {
+impl<S: Storage, C: Clock, R: RngBytes> Cache for LocalCache<S, C, R> {
     type Reader = S::Reader;
     type Writer = CacheWriter<S, AlignedVec>;
 
@@ -127,7 +131,7 @@ impl<S: Storage, C: Clock> Cache for LocalCache<S, C> {
         Ok(None)
     }
 
-    fn set(&mut self, keys: &[&str]) -> io::Result<Self::Writer> {
+    fn set(&self, keys: &[&str]) -> io::Result<Self::Writer> {
         let blob_id = self.blob_id_factory.new_id();
         let meta = Meta::new(blob_id, self.clock.now());
         let blob_path = Self::blob_path(&blob_id);
@@ -141,7 +145,7 @@ impl<S: Storage, C: Clock> Cache for LocalCache<S, C> {
     }
 }
 
-impl<S: Storage, C: Clock> LocalCache<S, C> {
+impl<S: Storage, C: Clock, R: RngBytes> LocalCache<S, C, R> {
     pub fn clean(
         &mut self,
         max_unused_age: Option<TimeDelta>,
@@ -232,7 +236,7 @@ impl<S: Storage, C: Clock> LocalCache<S, C> {
     fn iter_subdir_files<'a>(
         storage: &'a S,
         path: &'a str,
-    ) -> io::Result<impl Iterator<Item = io::Result<SubdirFile>> + use<'a, S, C>> {
+    ) -> io::Result<impl Iterator<Item = io::Result<SubdirFile>> + use<'a, S, C, R>> {
         let path_entries = storage.list(path)?.collect::<io::Result<Vec<_>>>()?;
         Ok(path_entries.into_iter().flat_map(move |path_entry| {
             if path_entry.entry_type != EntryType::Directory {
