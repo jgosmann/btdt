@@ -241,6 +241,7 @@ dependencies = [
 name = "btdt-server"
 version = "0.1.0"
 dependencies = [
+ "btdt",
  "config",
  "poem",
  "poem-openapi",

@@ -27,15 +27,15 @@ macro_rules! test_storage {
 
             #[test]
             fn test_list_returns_error_for_non_existent_file_or_dir() {
-                let mut storage = $constructor;
+                let storage = $constructor;
                 let result = storage.delete("/non-existent");
                 assert_eq!(result.err().unwrap().kind(), ErrorKind::NotFound);
             }
 
             #[test]
             fn test_can_get_file_that_was_previously_put_into_storage() {
-                let mut storage = $constructor;
-                write_file_to_storage(&mut storage, "/dir/file.txt", "Hello, world!").unwrap();
+                let storage = $constructor;
+                write_file_to_storage(&storage, "/dir/file.txt", "Hello, world!").unwrap();
                 assert_eq!(
                     &read_file_from_storage_to_string(&storage, "/dir/file.txt").unwrap(),
                     "Hello, world!"
@@ -44,10 +44,10 @@ macro_rules! test_storage {
 
             #[test]
             fn test_different_files_are_separate() {
-                let mut storage = $constructor;
+                let storage = $constructor;
 
-                write_file_to_storage(&mut storage, "/a.txt", "Hello, a!").unwrap();
-                write_file_to_storage(&mut storage, "/b.txt", "Hello, b!").unwrap();
+                write_file_to_storage(&storage, "/a.txt", "Hello, a!").unwrap();
+                write_file_to_storage(&storage, "/b.txt", "Hello, b!").unwrap();
 
                 assert_eq!(
                     &read_file_from_storage_to_string(&storage, "/a.txt").unwrap(),
@@ -61,9 +61,9 @@ macro_rules! test_storage {
 
             #[test]
             fn test_can_overwrite_existing_file() {
-                let mut storage = $constructor;
-                write_file_to_storage(&mut storage, "/file.txt", "Hello, world!").unwrap();
-                write_file_to_storage(&mut storage, "/file.txt", "Bye, world!").unwrap();
+                let storage = $constructor;
+                write_file_to_storage(&storage, "/file.txt", "Hello, world!").unwrap();
+                write_file_to_storage(&storage, "/file.txt", "Bye, world!").unwrap();
                 assert_eq!(
                     &read_file_from_storage_to_string(&storage, "/file.txt").unwrap(),
                     "Bye, world!"
@@ -72,18 +72,18 @@ macro_rules! test_storage {
 
             #[test]
             fn test_errors_when_trying_to_overwrite_dir_with_file() {
-                let mut storage = $constructor;
-                write_file_to_storage(&mut storage, "/dir/file.txt", "file-content").unwrap();
+                let storage = $constructor;
+                write_file_to_storage(&storage, "/dir/file.txt", "file-content").unwrap();
                 assert!(storage.put("dir").is_err());
             }
 
             #[test]
             fn test_list_returns_direct_children_of_directory() {
-                let mut storage = $constructor;
-                write_file_to_storage(&mut storage, "/rootfile.txt", "rootfile-content").unwrap();
-                write_file_to_storage(&mut storage, "/dir/file1.txt", "file1-content").unwrap();
-                write_file_to_storage(&mut storage, "/dir/file2.txt", "file2-content").unwrap();
-                write_file_to_storage(&mut storage, "/dir/subdir/subfile.txt", "subfile-content")
+                let storage = $constructor;
+                write_file_to_storage(&storage, "/rootfile.txt", "rootfile-content").unwrap();
+                write_file_to_storage(&storage, "/dir/file1.txt", "file1-content").unwrap();
+                write_file_to_storage(&storage, "/dir/file2.txt", "file2-content").unwrap();
+                write_file_to_storage(&storage, "/dir/subdir/subfile.txt", "subfile-content")
                     .unwrap();
 
                 let mut entries: Vec<_> = storage.list("/").unwrap().map(Result::unwrap).collect();
@@ -131,8 +131,8 @@ macro_rules! test_storage {
 
             #[test]
             fn test_can_delete_file() {
-                let mut storage = $constructor;
-                write_file_to_storage(&mut storage, "/file.txt", "file-content").unwrap();
+                let storage = $constructor;
+                write_file_to_storage(&storage, "/file.txt", "file-content").unwrap();
                 storage.delete("/file.txt").unwrap();
                 assert_eq!(
                     storage.get("/file.txt").err().unwrap().kind(),
@@ -143,8 +143,8 @@ macro_rules! test_storage {
 
             #[test]
             fn test_can_delete_empty_directory() {
-                let mut storage = $constructor;
-                write_file_to_storage(&mut storage, "/dir/file.txt", "file-content").unwrap();
+                let storage = $constructor;
+                write_file_to_storage(&storage, "/dir/file.txt", "file-content").unwrap();
                 storage.delete("/dir/file.txt").unwrap();
                 storage.delete("/dir").unwrap();
                 assert_eq!(storage.list("/").unwrap().count(), 0);
@@ -152,8 +152,8 @@ macro_rules! test_storage {
 
             #[test]
             fn test_delete_returns_error_for_non_empty_dir() {
-                let mut storage = $constructor;
-                write_file_to_storage(&mut storage, "/dir/file.txt", "file-content").unwrap();
+                let storage = $constructor;
+                write_file_to_storage(&storage, "/dir/file.txt", "file-content").unwrap();
                 assert_eq!(
                     storage.delete("/dir").err().unwrap().kind(),
                     ErrorKind::DirectoryNotEmpty
@@ -162,18 +162,18 @@ macro_rules! test_storage {
 
             #[test]
             fn test_exists_returns_true_for_existing_file() {
-                let mut storage = $constructor;
+                let storage = $constructor;
                 assert!(!storage.exists_file("/dir").unwrap());
                 assert!(!storage.exists_file("/dir/file.txt").unwrap());
-                write_file_to_storage(&mut storage, "/dir/file.txt", "file-content").unwrap();
+                write_file_to_storage(&storage, "/dir/file.txt", "file-content").unwrap();
                 assert!(!storage.exists_file("/dir").unwrap());
                 assert!(storage.exists_file("/dir/file.txt").unwrap());
             }
 
             #[test]
             fn test_put_is_atomic() {
-                let mut storage_a = $constructor;
-                let mut storage_b = $constructor;
+                let storage_a = $constructor;
+                let storage_b = $constructor;
                 let mut writer_a = storage_a.put("/file.txt").unwrap();
                 let mut writer_b = storage_b.put("/file.txt").unwrap();
                 writer_a.write_all(b"Hello, ").unwrap();
@@ -195,11 +195,7 @@ macro_rules! test_storage {
     };
 }
 
-pub fn write_file_to_storage(
-    storage: &mut impl Storage,
-    path: &str,
-    content: &str,
-) -> io::Result<()> {
+pub fn write_file_to_storage(storage: &impl Storage, path: &str, content: &str) -> io::Result<()> {
     let mut writer = storage.put(path)?;
     writer.write_all(content.as_bytes())
 }

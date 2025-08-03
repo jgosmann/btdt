@@ -4,8 +4,7 @@ mod staged_file;
 
 use crate::storage::filesystem::staged_file::{clean_leftover_tmp_files, StagedFile};
 use crate::storage::{EntryType, Storage, StorageEntry};
-use rand::rngs::StdRng;
-use rand::SeedableRng;
+use rand::rngs::ThreadRng;
 use std::borrow::Cow;
 use std::fs::File;
 use std::io::ErrorKind;
@@ -54,7 +53,6 @@ use std::{fs, io};
 /// ```
 pub struct FilesystemStorage {
     root: PathBuf,
-    rng: StdRng,
 }
 
 impl FilesystemStorage {
@@ -62,10 +60,7 @@ impl FilesystemStorage {
     ///
     /// All paths will be nested in the given root directory.
     pub fn new(root: PathBuf) -> Self {
-        FilesystemStorage {
-            root,
-            rng: StdRng::from_os_rng(),
-        }
+        FilesystemStorage { root }
     }
 
     /// Cleans up leftover temporary files in the storage.
@@ -82,7 +77,7 @@ impl Storage for FilesystemStorage {
     type Reader = File;
     type Writer = StagedFile<PathBuf>;
 
-    fn delete(&mut self, path: &str) -> io::Result<()> {
+    fn delete(&self, path: &str) -> io::Result<()> {
         let full_path = self.canonical_path(path)?;
         if full_path.is_dir() {
             fs::remove_dir(full_path)
@@ -128,7 +123,7 @@ impl Storage for FilesystemStorage {
             .filter_map(Result::transpose))
     }
 
-    fn put(&mut self, path: &str) -> io::Result<Self::Writer> {
+    fn put(&self, path: &str) -> io::Result<Self::Writer> {
         let canonical_path = self.canonical_path(path)?;
         if self.root.exists() {
             if let Some(parent_dir) = canonical_path.parent() {
@@ -147,7 +142,7 @@ impl Storage for FilesystemStorage {
                 }
             }
         }
-        StagedFile::new(canonical_path, &mut self.rng)
+        StagedFile::new(canonical_path, &mut ThreadRng::default())
     }
 }
 
@@ -169,7 +164,6 @@ mod tests {
     use crate::storage::tests::{read_file_from_storage_to_string, write_file_to_storage};
     use crate::test_storage;
     use std::fs::create_dir_all;
-    use std::io::Read;
     use std::path::Path;
     use tempfile::{tempdir, TempDir};
 
@@ -192,7 +186,7 @@ mod tests {
         type Reader = <FilesystemStorage as Storage>::Reader;
         type Writer = <FilesystemStorage as Storage>::Writer;
 
-        fn delete(&mut self, path: &str) -> io::Result<()> {
+        fn delete(&self, path: &str) -> io::Result<()> {
             self.storage.delete(path)
         }
 
@@ -208,7 +202,7 @@ mod tests {
             self.storage.list(path)
         }
 
-        fn put(&mut self, path: &str) -> io::Result<Self::Writer> {
+        fn put(&self, path: &str) -> io::Result<Self::Writer> {
             self.storage.put(path)
         }
     }

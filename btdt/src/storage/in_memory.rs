@@ -12,6 +12,7 @@ use crate::util::close::SelfClosing;
 use std::borrow::Cow;
 use std::io;
 use std::io::ErrorKind;
+use std::sync::RwLock;
 
 /// In-memory storage implementation.
 ///
@@ -40,16 +41,16 @@ use std::io::ErrorKind;
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct InMemoryStorage {
-    root: DirNode,
+    root: RwLock<DirNode>,
 }
 
 impl InMemoryStorage {
     /// Creates a new in-memory storage.
     pub fn new() -> Self {
         InMemoryStorage {
-            root: DirNode::new(),
+            root: RwLock::new(DirNode::new()),
         }
     }
 }
@@ -64,8 +65,8 @@ impl Storage for InMemoryStorage {
     type Reader = FileReader;
     type Writer = SelfClosing<FileWriter>;
 
-    fn delete(&mut self, path: &str) -> io::Result<()> {
-        let mut dir = &mut self.root;
+    fn delete(&self, path: &str) -> io::Result<()> {
+        let mut dir = &mut *self.root.write().unwrap();
         for component in path.path_components()? {
             if component.is_last {
                 return dir.delete(component.name);
@@ -99,7 +100,7 @@ impl Storage for InMemoryStorage {
     }
 
     fn get(&self, path: &str) -> io::Result<Self::Reader> {
-        let mut dir = &self.root;
+        let mut dir = &*self.root.read().unwrap();
         let mut components = path.path_components()?;
         for component in components.by_ref() {
             if component.is_last {
@@ -130,7 +131,7 @@ impl Storage for InMemoryStorage {
     }
 
     fn list(&self, path: &str) -> io::Result<impl Iterator<Item = io::Result<StorageEntry>>> {
-        let mut dir = &self.root;
+        let mut dir = &*self.root.read().unwrap();
         for component in path.path_components()? {
             dir = match dir.get(component.name) {
                 Some(Node::Dir(dir)) => dir,
@@ -151,23 +152,27 @@ impl Storage for InMemoryStorage {
             };
         }
 
-        Ok(dir.list().map(|(name, node)| {
-            Ok(StorageEntry {
-                entry_type: match node {
-                    Node::Dir(_) => EntryType::Directory,
-                    Node::File(_) => EntryType::File,
-                },
-                name: Cow::Borrowed(name),
-                size: match node {
-                    Node::Dir(dir) => dir.size() as u64,
-                    Node::File(file) => file.size() as u64,
-                },
+        Ok(dir
+            .list()
+            .map(|(name, node)| {
+                Ok(StorageEntry {
+                    entry_type: match node {
+                        Node::Dir(_) => EntryType::Directory,
+                        Node::File(_) => EntryType::File,
+                    },
+                    name: Cow::Owned(name.clone()),
+                    size: match node {
+                        Node::Dir(dir) => dir.size() as u64,
+                        Node::File(file) => file.size() as u64,
+                    },
+                })
             })
-        }))
+            .collect::<Vec<_>>()
+            .into_iter())
     }
 
-    fn put(&mut self, path: &str) -> io::Result<Self::Writer> {
-        let mut dir = &mut self.root;
+    fn put(&self, path: &str) -> io::Result<Self::Writer> {
+        let mut dir = &mut *self.root.write().unwrap();
         let mut components = path.path_components()?;
         for component in components.by_ref() {
             if component.is_last {

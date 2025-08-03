@@ -35,7 +35,7 @@ pub trait Storage {
     type Writer: Write + Close;
 
     /// Deletes the file at the given path.
-    fn delete(&mut self, path: &str) -> io::Result<()>;
+    fn delete(&self, path: &str) -> io::Result<()>;
 
     /// Checks if a file exists at the given path.
     fn exists_file(&self, path: &str) -> io::Result<bool>;
@@ -53,7 +53,7 @@ pub trait Storage {
     ///
     /// The implementation must ensure that the file becomes available atomically when
     /// [Close::close] is called. It also must create intermediate directories if necessary.
-    fn put(&mut self, path: &str) -> io::Result<Self::Writer>;
+    fn put(&self, path: &str) -> io::Result<Self::Writer>;
 }
 
 /// The type of entry when listing a storage directory.
