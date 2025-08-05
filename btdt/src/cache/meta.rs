@@ -42,6 +42,11 @@ pub struct Meta<T> {
     _pin: PhantomPinned,
 }
 
+// safety: Send is not implemented automatically for Meta because of the NonNull field.
+// However, the data is owned by the Meta struct, and thus the NonNull field cannot be aliased.
+// Thus, send is safe.
+unsafe impl<T: Send> Send for Meta<T> {}
+
 impl Meta<AlignedVec> {
     pub fn new(blob_id: BlobId, latest_access: DateTime<Utc>) -> Pin<Box<Self>> {
         let meta = MetaV1::new(blob_id, latest_access);
