@@ -1,12 +1,40 @@
 use crate::app::Options;
 use crate::config::BtdtServerConfig;
 use poem::listener::{BoxListener, Listener, NativeTlsConfig};
-use poem::{listener::TcpListener, Server};
+use poem::{listener::TcpListener, Endpoint, EndpointExt, Middleware, Request, Server};
 use std::fs::File;
 use std::io::Read;
 
 mod app;
 mod config;
+
+struct ErrorLogMiddleware {}
+
+struct ErrorLogMiddlewareImpl<E: Endpoint> {
+    ep: E,
+}
+
+impl<E: Endpoint> Middleware<E> for ErrorLogMiddleware {
+    type Output = ErrorLogMiddlewareImpl<E>;
+
+    fn transform(&self, ep: E) -> Self::Output {
+        ErrorLogMiddlewareImpl { ep }
+    }
+}
+
+impl<E: Endpoint> Endpoint for ErrorLogMiddlewareImpl<E> {
+    type Output = E::Output;
+
+    async fn call(&self, req: Request) -> poem::Result<Self::Output> {
+        match self.ep.call(req).await {
+            Ok(response) => Ok(response),
+            Err(err) => {
+                eprintln!("Error: {:?}", err);
+                Err(err)
+            }
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -40,11 +68,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Server::new(listener)
-        .run(app::create_route(
-            Options::builder()
-                .enable_api_docs(settings.enable_api_docs)
-                .build(),
-        ))
+        .run(
+            app::create_route(
+                Options::builder()
+                    .enable_api_docs(settings.enable_api_docs)
+                    .build(),
+            )
+            .with(ErrorLogMiddleware {}),
+        )
         .await?;
     Ok(())
 }

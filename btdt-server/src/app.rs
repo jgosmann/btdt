@@ -1,6 +1,8 @@
 use poem::Route;
 
 mod api;
+mod cache_dispatcher;
+mod get_from_cache;
 
 #[derive(Clone, Debug)]
 pub struct Options {

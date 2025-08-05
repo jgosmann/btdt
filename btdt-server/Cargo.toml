@@ -4,11 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+btdt = { path = "../btdt", version = "0.1.0" }
 config = { version = "0.15.13", features = ["toml"] }
 poem = { version = "3", features = ["native-tls"] }
 poem-openapi = { version = "5", features = ["swagger-ui"] }
 serde = "1.0.219"
 tokio = { version = "1.47.1", features = ["rt-multi-thread"] }
+tokio-util = { version = "0.7.16", features = ["io", "io-util"] }
 
 [dev-dependencies]
 poem = { version = "3", features = ["test"] }
