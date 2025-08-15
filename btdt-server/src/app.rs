@@ -40,11 +40,12 @@ impl OptionsBuilder {
 }
 
 pub fn create_route(options: Options) -> Route {
-    let api_service = api::create_openapi_service();
+    const API_PREFIX: &str = "/api";
+    let api_service = api::create_openapi_service().url_prefix(API_PREFIX);
     let mut route = Route::new();
     if options.enable_api_docs {
         let docs = api_service.swagger_ui();
         route = route.nest("/docs", docs)
     }
-    route.nest("/api", api_service)
+    route.nest(API_PREFIX, api_service)
 }
