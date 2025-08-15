@@ -12,6 +12,8 @@ use poem_openapi::{OpenApi, OpenApiService};
 use std::collections::HashMap;
 use std::io::Write;
 use tokio::io::AsyncReadExt;
+use tokio::task::spawn_blocking;
+use tokio_util::io::SyncIoBridge;
 
 pub struct Api {
     caches: HashMap<String, CacheDispatcher>,
@@ -72,21 +74,14 @@ impl Api {
                 let mut writer = cache
                     .set(&key.0.iter().map(String::as_ref).collect::<Vec<_>>())
                     .map_err(poem::error::InternalServerError)?;
-                let mut reader = body.into_async_read();
-                let mut data = vec![0; 64 * 1024];
-                loop {
-                    let len = reader
-                        .read(&mut data)
-                        .await
-                        .map_err(poem::error::InternalServerError)?;
-                    if len == 0 {
-                        break;
-                    }
-                    writer
-                        .write(&data[..len])
-                        .map_err(poem::error::InternalServerError)?;
-                }
-                writer.close().map_err(poem::error::InternalServerError)?;
+                let mut sync_reader = SyncIoBridge::new(body.into_async_read());
+                spawn_blocking(move || {
+                    std::io::copy(&mut sync_reader, &mut writer)?;
+                    writer.close()
+                })
+                .await
+                .map_err(poem::error::InternalServerError)?
+                .map_err(poem::error::InternalServerError)?;
                 Response::new(()).status(StatusCode::NO_CONTENT)
             }
             None => Response::new(()).status(StatusCode::NOT_FOUND),
