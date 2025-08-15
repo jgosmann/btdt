@@ -43,13 +43,13 @@ impl DirNode {
 
     pub fn delete(&mut self, name: &str) -> io::Result<()> {
         if let Some(node) = self.0.get(name) {
-            if let Node::Dir(dir) = node {
-                if !dir.is_empty() {
-                    return Err(io::Error::new(
-                        ErrorKind::DirectoryNotEmpty,
-                        "Directory must be empty to be deleted",
-                    ));
-                }
+            if let Node::Dir(dir) = node
+                && !dir.is_empty()
+            {
+                return Err(io::Error::new(
+                    ErrorKind::DirectoryNotEmpty,
+                    "Directory must be empty to be deleted",
+                ));
             }
             self.0.remove(name);
             Ok(())

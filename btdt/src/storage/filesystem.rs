@@ -2,7 +2,7 @@
 
 mod staged_file;
 
-use crate::storage::filesystem::staged_file::{clean_leftover_tmp_files, StagedFile};
+use crate::storage::filesystem::staged_file::{StagedFile, clean_leftover_tmp_files};
 use crate::storage::{EntryType, Storage, StorageEntry};
 use rand::rngs::ThreadRng;
 use std::borrow::Cow;
@@ -125,20 +125,20 @@ impl Storage for FilesystemStorage {
 
     fn put(&self, path: &str) -> io::Result<Self::Writer> {
         let canonical_path = self.canonical_path(path)?;
-        if self.root.exists() {
-            if let Some(parent_dir) = canonical_path.parent() {
-                let mut path = PathBuf::new();
-                for component in parent_dir.components() {
-                    if component == Component::ParentDir {
-                        return Err(io::Error::new(
-                            ErrorKind::InvalidInput,
-                            "Path must not contain parent directory components",
-                        ));
-                    }
-                    path = path.join(component);
-                    if !path.exists() {
-                        fs::create_dir(&path)?;
-                    }
+        if self.root.exists()
+            && let Some(parent_dir) = canonical_path.parent()
+        {
+            let mut path = PathBuf::new();
+            for component in parent_dir.components() {
+                if component == Component::ParentDir {
+                    return Err(io::Error::new(
+                        ErrorKind::InvalidInput,
+                        "Path must not contain parent directory components",
+                    ));
+                }
+                path = path.join(component);
+                if !path.exists() {
+                    fs::create_dir(&path)?;
                 }
             }
         }
@@ -165,7 +165,7 @@ mod tests {
     use crate::test_storage;
     use std::fs::create_dir_all;
     use std::path::Path;
-    use tempfile::{tempdir, TempDir};
+    use tempfile::{TempDir, tempdir};
 
     struct FilesystemStorageTestFixture {
         storage: FilesystemStorage,

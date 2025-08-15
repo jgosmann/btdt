@@ -78,7 +78,7 @@ impl Storage for InMemoryStorage {
                     return Err(io::Error::new(
                         ErrorKind::NotFound,
                         "No such file or directory",
-                    ))
+                    ));
                 }
             };
         }
@@ -119,7 +119,7 @@ impl Storage for InMemoryStorage {
                     return Err(io::Error::new(
                         ErrorKind::NotFound,
                         "No such file or directory",
-                    ))
+                    ));
                 }
             };
         }
@@ -136,13 +136,10 @@ impl Storage for InMemoryStorage {
             dir = match dir.get(component.name) {
                 Some(Node::Dir(dir)) => dir,
                 child => {
-                    if component.is_last {
-                        if let Some(Node::File(_)) = child {
-                            return Err(io::Error::new(
-                                ErrorKind::NotADirectory,
-                                "Not a directory",
-                            ));
-                        }
+                    if component.is_last
+                        && let Some(Node::File(_)) = child
+                    {
+                        return Err(io::Error::new(ErrorKind::NotADirectory, "Not a directory"));
                     }
                     return Err(io::Error::new(
                         ErrorKind::NotFound,

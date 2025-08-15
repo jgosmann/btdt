@@ -1,7 +1,7 @@
 //! Provides a local cache implementation that stores data in a storage backend.
 
 use super::blob_id::{BlobId, BlobIdFactory, RngBytes, ThreadRng};
-use super::meta::{Meta, META_MAX_SIZE};
+use super::meta::{META_MAX_SIZE, Meta};
 use super::{Cache, CacheHit};
 use crate::storage::{EntryType, Storage};
 use crate::util::clock::{Clock, SystemClock};
@@ -202,12 +202,10 @@ impl<S: Storage, C: Clock, R: RngBytes> LocalCache<S, C, R> {
                 latest_access: Reverse(latest_access),
                 ..
             }) = heap.peek()
+                && latest_access >= &cutoff.unwrap_or(DateTime::<Utc>::MIN_UTC)
+                && blob_size_sum <= max_blob_size_sum.unwrap_or(u64::MAX)
             {
-                if latest_access >= &cutoff.unwrap_or(DateTime::<Utc>::MIN_UTC)
-                    && blob_size_sum <= max_blob_size_sum.unwrap_or(u64::MAX)
-                {
-                    break;
-                }
+                break;
             }
             let Blob {
                 keys,
