@@ -1,17 +1,15 @@
 use crate::app::cache_dispatcher::CacheDispatcher;
 use crate::app::get_from_cache::GetFromCacheResponse;
-use btdt::cache::local::LocalCache;
 use btdt::cache::Cache;
+use btdt::cache::local::LocalCache;
 use btdt::storage::in_memory::InMemoryStorage;
 use btdt::util::close::Close;
-use poem::http::StatusCode;
 use poem::Body;
+use poem::http::StatusCode;
 use poem_openapi::param::{Path, Query};
 use poem_openapi::payload::{PlainText, Response};
 use poem_openapi::{OpenApi, OpenApiService};
 use std::collections::HashMap;
-use std::io::Write;
-use tokio::io::AsyncReadExt;
 use tokio::task::spawn_blocking;
 use tokio_util::io::SyncIoBridge;
 
@@ -92,9 +90,9 @@ impl Api {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use poem::Route;
     use poem::http::StatusCode;
     use poem::test::TestClient;
-    use poem::Route;
     use tempfile::tempdir;
 
     struct TestFixture {
