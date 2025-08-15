@@ -94,7 +94,7 @@ impl Storage for FilesystemStorage {
         Ok(self.canonical_path(path)?.is_file())
     }
 
-    fn list(&self, path: &str) -> io::Result<impl Iterator<Item = io::Result<StorageEntry>>> {
+    fn list(&self, path: &str) -> io::Result<impl Iterator<Item = io::Result<StorageEntry<'_>>>> {
         Ok(self
             .canonical_path(path)?
             .read_dir()?

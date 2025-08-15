@@ -2,11 +2,11 @@ use std::io;
 use std::io::ErrorKind;
 
 pub trait PathIterExt {
-    fn path_components(&self) -> io::Result<PathIter<impl Iterator<Item = &str>>>;
+    fn path_components(&self) -> io::Result<PathIter<'_, impl Iterator<Item = &str>>>;
 }
 
 impl PathIterExt for &str {
-    fn path_components(&self) -> io::Result<PathIter<impl Iterator<Item = &str>>> {
+    fn path_components(&self) -> io::Result<PathIter<'_, impl Iterator<Item = &str>>> {
         if !self.starts_with('/') {
             return Err(io::Error::new(
                 ErrorKind::InvalidInput,

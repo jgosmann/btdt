@@ -44,7 +44,7 @@ pub trait Storage {
     fn get(&self, path: &str) -> io::Result<Self::Reader>;
 
     /// Returns an iterator over the entries in the directory at the given path.
-    fn list(&self, path: &str) -> io::Result<impl Iterator<Item = io::Result<StorageEntry>>>;
+    fn list(&self, path: &str) -> io::Result<impl Iterator<Item = io::Result<StorageEntry<'_>>>>;
 
     /// Returns a writer for the file at the given path.
     ///

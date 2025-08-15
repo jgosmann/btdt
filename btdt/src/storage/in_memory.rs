@@ -130,7 +130,7 @@ impl Storage for InMemoryStorage {
         ))
     }
 
-    fn list(&self, path: &str) -> io::Result<impl Iterator<Item = io::Result<StorageEntry>>> {
+    fn list(&self, path: &str) -> io::Result<impl Iterator<Item = io::Result<StorageEntry<'_>>>> {
         let mut dir = &*self.root.read().unwrap();
         for component in path.path_components()? {
             dir = match dir.get(component.name) {
