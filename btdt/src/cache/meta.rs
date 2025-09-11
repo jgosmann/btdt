@@ -3,7 +3,7 @@
 use crate::cache::blob_id::BlobId;
 use chrono::{DateTime, Utc};
 use rkyv::util::AlignedVec;
-use rkyv::{rancor, Archive, Serialize};
+use rkyv::{Archive, Serialize, rancor};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomPinned;

@@ -1,8 +1,8 @@
 use crate::cache_fixture::CacheFixture;
-use btdt::cache::local::LocalCache;
 use btdt::cache::Cache;
+use btdt::cache::local::LocalCache;
 use btdt::storage::filesystem::FilesystemStorage;
-use std::fs::{create_dir_all, File};
+use std::fs::{File, create_dir_all};
 use std::process::Command;
 
 mod cache_fixture;

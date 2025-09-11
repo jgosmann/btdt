@@ -132,10 +132,12 @@ mod tests {
 
         let destination_path = tempdir.path().join("destination-root");
 
-        assert!(pipeline
-            .restore(&["non-existent"], &destination_path)
-            .unwrap()
-            .is_none());
+        assert!(
+            pipeline
+                .restore(&["non-existent"], &destination_path)
+                .unwrap()
+                .is_none()
+        );
         assert_eq!(
             pipeline
                 .restore(

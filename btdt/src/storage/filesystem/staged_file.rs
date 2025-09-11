@@ -132,8 +132,8 @@ pub fn clean_leftover_tmp_files<P_: AsRef<Path>>(path: P_) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::rngs::StdRng;
     use rand::SeedableRng;
+    use rand::rngs::StdRng;
     use std::io::Read;
     use tempfile::tempdir;
 

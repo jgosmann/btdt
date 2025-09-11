@@ -2,13 +2,13 @@ use btdt::cache::blob_id::{BlobIdFactory, SharedRng};
 use btdt::cache::local::LocalCache;
 use btdt::pipeline::Pipeline;
 use btdt::storage::filesystem::FilesystemStorage;
-use rand::rngs::StdRng;
 use rand::SeedableRng;
-use std::fs::{create_dir_all, read_dir, remove_dir_all, File};
+use rand::rngs::StdRng;
+use std::fs::{File, create_dir_all, read_dir, remove_dir_all};
 use std::io::Write;
 use std::path::Path;
 use std::{fs, io};
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 
 pub struct CacheFixture {
     cache_dir: TempDir,
