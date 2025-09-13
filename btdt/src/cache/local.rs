@@ -115,7 +115,12 @@ impl<S: Storage, C: Clock, R: RngBytes> Cache for LocalCache<S, C, R> {
 
                     let blob_path = Self::blob_path(meta.blob_id());
                     match self.storage.get(&blob_path) {
-                        Ok(reader) => return Ok(Some(CacheHit { key, reader })),
+                        Ok(file_handle) => {
+                            return Ok(Some(CacheHit {
+                                key,
+                                reader: file_handle.reader,
+                            }));
+                        }
                         Err(err) => match err.kind() {
                             ErrorKind::NotFound => continue,
                             _ => return Err(err),
@@ -224,7 +229,7 @@ impl<S: Storage, C: Clock, R: RngBytes> LocalCache<S, C, R> {
     }
 
     fn read_meta(&self, path: &str) -> io::Result<Pin<Box<Meta<[u8; META_MAX_SIZE]>>>> {
-        let mut reader = self.storage.get(path)?;
+        let mut reader = self.storage.get(path)?.reader;
         let mut meta_data = [0u8; META_MAX_SIZE];
         reader.read_exact(meta_data.as_mut())?;
         Meta::from_bytes(meta_data)
@@ -381,7 +386,7 @@ mod tests {
             .get(&LocalCache::<InMemoryStorage>::meta_path("key"))
             .unwrap();
         let mut buf = Vec::with_capacity(META_MAX_SIZE);
-        meta_reader.read_to_end(&mut buf).unwrap();
+        meta_reader.reader.read_to_end(&mut buf).unwrap();
         let meta = Meta::from_bytes(&mut buf).unwrap();
         assert_eq!(meta.deref().latest_access().unwrap(), clock.now());
     }

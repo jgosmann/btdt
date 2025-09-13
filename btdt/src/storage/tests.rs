@@ -201,8 +201,8 @@ pub fn write_file_to_storage(storage: &impl Storage, path: &str, content: &str) 
 }
 
 pub fn read_file_from_storage_to_string(storage: &impl Storage, path: &str) -> io::Result<String> {
-    let mut reader = storage.get(path)?;
+    let mut handle = storage.get(path)?;
     let mut buf = String::new();
-    reader.read_to_string(&mut buf)?;
+    handle.reader.read_to_string(&mut buf)?;
     Ok(buf)
 }
