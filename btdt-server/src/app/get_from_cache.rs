@@ -26,6 +26,7 @@ where
     fn from(hit: CacheHit<R>) -> Self {
         GetFromCacheResponse::CacheHit(Binary(Body::from_bytes_stream(StreamAdapter::new(
             Box::new(hit.reader),
+            hit.size_hint,
         ))))
     }
 }

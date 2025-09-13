@@ -247,6 +247,7 @@ dependencies = [
  "bytes 1.10.1",
  "config",
  "criterion",
+ "fs2",
  "futures-core",
  "poem",
  "poem-openapi",
