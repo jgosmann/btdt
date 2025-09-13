@@ -1,6 +1,7 @@
 use asyncio::StreamAdapter;
 use btdt::test_util::fs::CreateFilled;
 use criterion::{Criterion, criterion_group, criterion_main};
+use fs2::FileExt;
 use rand_core::{RngCore, SeedableRng};
 use rand_xoshiro::Xoshiro256PlusPlus;
 use std::fs::File;
@@ -39,7 +40,7 @@ pub fn bench_stream_adapter(c: &mut Criterion) {
         group.bench_function(format!("Read {} KiB bytes", size_kB), |b| {
             b.to_async(&harness.runtime).iter(async || {
                 let mut stream_adapter =
-                    StreamAdapter::new(Box::new(File::open(&input_path).unwrap()));
+                    StreamAdapter::new(Box::new(File::open(&input_path).unwrap()), size as u64);
                 while let Some(chunk) = stream_adapter.next().await {
                     black_box(chunk.unwrap());
                 }

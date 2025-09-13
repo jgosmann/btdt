@@ -20,6 +20,7 @@ tokio-util = { version = "0.7.16", features = ["io", "io-util"] }
 
 [dev-dependencies]
 criterion = { version = "0.7.0", features = ["cargo_bench_support", "plotters", "rayon", "async_tokio"] }
+fs2 = "0.4.3"
 poem = { version = "3", features = ["test"] }
 rand_core = "0.9.3"
 rand_xoshiro = "0.7.0"

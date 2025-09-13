@@ -13,11 +13,13 @@ pub struct StreamAdapter {
 }
 
 impl StreamAdapter {
-    pub fn new<R: Read + Send + 'static>(mut reader: R) -> Self {
+    pub fn new<R: Read + Send + 'static>(mut reader: R, size_hint: u64) -> Self {
         let (tx, rx) = mpsc::channel(10);
         spawn_blocking(move || {
             const MAX_BUF_SIZE: usize = 512 * 1024;
-            let mut buf = BytesMut::zeroed(MAX_BUF_SIZE);
+            const REALLOCATION_THRESHOLD: usize = 1024;
+            let buf_size = usize::min(size_hint as usize + REALLOCATION_THRESHOLD, MAX_BUF_SIZE);
+            let mut buf = BytesMut::zeroed(buf_size);
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => break, // EOF
@@ -33,7 +35,7 @@ impl StreamAdapter {
                     }
                 }
 
-                if buf.capacity() < 1024 {
+                if buf.capacity() < REALLOCATION_THRESHOLD {
                     buf = BytesMut::zeroed(MAX_BUF_SIZE);
                 }
             }
