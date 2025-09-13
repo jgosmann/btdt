@@ -4,7 +4,7 @@
 use crate::cache::Cache;
 use crate::util::close::Close;
 use std::io;
-use std::io::{BufReader, BufWriter};
+use std::io::BufWriter;
 use std::path::Path;
 
 /// A pipeline defines how multiple files a processed to be stored in the cache.
@@ -63,7 +63,7 @@ impl<C: Cache> Pipeline<C> {
         destination: impl AsRef<Path>,
     ) -> io::Result<Option<&'a str>> {
         if let Some(cache_hit) = self.cache.get(keys)? {
-            tar::Archive::new(BufReader::new(cache_hit.reader)).unpack(destination.as_ref())?;
+            tar::Archive::new(cache_hit.reader).unpack(destination.as_ref())?;
             Ok(Some(cache_hit.key))
         } else {
             Ok(None)
