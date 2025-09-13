@@ -16,7 +16,7 @@ impl StreamAdapter {
     pub fn new<R: Read + Send + 'static>(mut reader: R) -> Self {
         let (tx, rx) = mpsc::channel(10);
         spawn_blocking(move || {
-            const MAX_BUF_SIZE: usize = 81_920;
+            const MAX_BUF_SIZE: usize = 512 * 1024;
             let mut buf = BytesMut::zeroed(MAX_BUF_SIZE);
             loop {
                 match reader.read(&mut buf) {
