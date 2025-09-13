@@ -1,4 +1,4 @@
-use crate::app::asyncio::StreamAdapter;
+use asyncio::StreamAdapter;
 use btdt::cache::CacheHit;
 use poem::Body;
 use poem_openapi::ApiResponse;

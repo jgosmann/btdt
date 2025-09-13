@@ -1,7 +1,6 @@
 use poem::Route;
 
 mod api;
-mod asyncio;
 mod cache_dispatcher;
 mod get_from_cache;
 

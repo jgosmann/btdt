@@ -20,6 +20,7 @@ impl CreateFilled for File {
             file.write_all(slice)?;
             remaining -= slice.len();
         }
+        file.flush()?;
         Ok(file)
     }
 }
