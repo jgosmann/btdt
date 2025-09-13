@@ -30,5 +30,6 @@ pub mod test_util {
     //!
     //! These are not intended to be used in production code.
 
+    pub mod fs;
     pub mod fs_spec;
 }

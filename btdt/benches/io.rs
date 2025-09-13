@@ -1,11 +1,11 @@
 use btdt::cache::local::LocalCache;
 use btdt::pipeline::Pipeline;
 use btdt::storage::filesystem::FilesystemStorage;
+use btdt::test_util::fs::CreateFilled;
 use criterion::{Criterion, SamplingMode, Throughput, criterion_group, criterion_main};
 use rand::{RngCore, SeedableRng};
 use rand_xoshiro::Xoshiro256PlusPlus;
 use std::fs::File;
-use std::io::Write;
 use std::path::PathBuf;
 use tempfile::tempdir;
 
@@ -39,16 +39,12 @@ impl<Rng: RngCore> IoBenchHarness<Rng> {
     fn create_files(&mut self, num_files: usize, file_size: usize) {
         let input_path = self.tempdir.path().join("input");
         for i in 0..num_files {
-            let mut file = File::create(&input_path.join(format!("file.{i}.bin"))).unwrap();
-            const MAX_BUF_SIZE: usize = 10_485_760; // 10 MiB
-            let mut buf = vec![0; usize::min(file_size, MAX_BUF_SIZE)];
-            let mut remaining = file_size;
-            while remaining > 0 {
-                let slice = &mut buf[..usize::min(remaining, MAX_BUF_SIZE)];
-                self.rng.fill_bytes(slice);
-                file.write_all(slice).unwrap();
-                remaining -= slice.len();
-            }
+            File::create_filled(
+                &input_path.join(format!("file.{i}.bin")),
+                file_size,
+                &mut self.rng,
+            )
+            .unwrap();
         }
     }
 }
