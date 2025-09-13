@@ -1,7 +1,9 @@
 use crate::app::cache_dispatcher::CacheDispatcher;
 use crate::app::get_from_cache::GetFromCacheResponse;
+use crate::config::CacheConfig;
 use btdt::cache::Cache;
 use btdt::cache::local::LocalCache;
+use btdt::storage::filesystem::FilesystemStorage;
 use btdt::storage::in_memory::InMemoryStorage;
 use btdt::util::close::Close;
 use poem::Body;
@@ -17,13 +19,23 @@ pub struct Api {
     caches: HashMap<String, CacheDispatcher>,
 }
 
-pub fn create_openapi_service() -> OpenApiService<Api, ()> {
-    let mut caches: HashMap<String, CacheDispatcher> = HashMap::new();
-    // FIXME: initialize caches from config
-    caches.insert(
-        "test-cache".to_string(),
-        CacheDispatcher::InMemory(LocalCache::new(InMemoryStorage::new())),
-    );
+pub fn create_openapi_service(config: &HashMap<String, CacheConfig>) -> OpenApiService<Api, ()> {
+    let caches = config
+        .iter()
+        .map(|(key, cache_config)| {
+            (
+                key.clone(),
+                match cache_config {
+                    CacheConfig::InMemory => {
+                        CacheDispatcher::InMemory(LocalCache::new(InMemoryStorage::new()))
+                    }
+                    CacheConfig::Filesystem { path } => CacheDispatcher::Filesystem(
+                        LocalCache::new(FilesystemStorage::new(path.into())),
+                    ),
+                },
+            )
+        })
+        .collect();
     OpenApiService::new(Api { caches }, "btdt server API", "0.1")
 }
 

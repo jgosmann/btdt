@@ -1,4 +1,6 @@
+use crate::config::CacheConfig;
 use poem::Route;
+use std::collections::HashMap;
 
 mod api;
 mod cache_dispatcher;
@@ -39,9 +41,9 @@ impl OptionsBuilder {
     }
 }
 
-pub fn create_route(options: Options) -> Route {
+pub fn create_route(options: Options, cache_config: &HashMap<String, CacheConfig>) -> Route {
     const API_PREFIX: &str = "/api";
-    let api_service = api::create_openapi_service().url_prefix(API_PREFIX);
+    let api_service = api::create_openapi_service(cache_config).url_prefix(API_PREFIX);
     let mut route = Route::new();
     if options.enable_api_docs {
         let docs = api_service.swagger_ui();

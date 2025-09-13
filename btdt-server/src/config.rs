@@ -1,5 +1,6 @@
 use config::builder::DefaultState;
 use config::{Config, ConfigBuilder, ConfigError, Environment, File, Map, Source};
+use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
@@ -8,12 +9,21 @@ pub struct BtdtServerConfig {
     pub enable_api_docs: bool,
     pub tls_keystore: String,
     pub tls_keystore_password: String,
+
+    pub caches: HashMap<String, CacheConfig>,
 }
 
 impl BtdtServerConfig {
     pub fn load() -> Result<Self, LoadConfigError> {
         ConfigLoader::new().add_default_sources().load()
     }
+}
+
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
+#[serde(tag = "type")]
+pub enum CacheConfig {
+    InMemory,
+    Filesystem { path: String },
 }
 
 #[derive(Debug)]
@@ -74,6 +84,7 @@ impl ConfigLoader {
             .set_default("enable_api_docs", true)?
             .set_default("tls_keystore", "".to_string())?
             .set_default("tls_keystore_password", "".to_string())?
+            .set_default("caches", HashMap::<String, String>::new())?
             .build()?
             .try_deserialize()
             .map_err(LoadConfigError::from)
@@ -82,8 +93,9 @@ impl ConfigLoader {
 
 #[cfg(test)]
 mod tests {
-    use crate::config::{BtdtServerConfig, ConfigLoader};
+    use crate::config::{BtdtServerConfig, CacheConfig, ConfigLoader};
     use config::{File, FileFormat, Map};
+    use std::collections::HashMap;
 
     #[test]
     fn test_configuration_defaults() {
@@ -95,6 +107,7 @@ mod tests {
                 enable_api_docs: true,
                 tls_keystore: "".to_string(),
                 tls_keystore_password: "".to_string(),
+                caches: HashMap::new(),
             }
         )
     }
@@ -106,6 +119,10 @@ mod tests {
             enable_api_docs = false
             tls_keystore = 'path/certificate.p12'
             tls_keystore_password = 'password'
+
+            [caches]
+            in_memory = { type = 'InMemory' }
+            filesystem = { type = 'Filesystem', path = '/var/lib/btdt-server/cache' }
         ";
         let file = File::from_str(config, FileFormat::Toml);
         let parsed_config = ConfigLoader::new().add_file_source(file).load().unwrap();
@@ -115,7 +132,16 @@ mod tests {
                 bind_addrs: vec!["127.0.0.1:8707".to_string(), "[::1]:8707".to_string()],
                 enable_api_docs: false,
                 tls_keystore: "path/certificate.p12".to_string(),
-                tls_keystore_password: "password".to_string()
+                tls_keystore_password: "password".to_string(),
+                caches: HashMap::from([
+                    ("in_memory".to_string(), CacheConfig::InMemory),
+                    (
+                        "filesystem".to_string(),
+                        CacheConfig::Filesystem {
+                            path: "/var/lib/btdt-server/cache".to_string()
+                        }
+                    )
+                ])
             }
         );
     }
@@ -148,6 +174,7 @@ mod tests {
                 enable_api_docs: false,
                 tls_keystore: "path/certificate.p12".to_string(),
                 tls_keystore_password: "password".to_string(),
+                caches: HashMap::new(),
             }
         );
     }

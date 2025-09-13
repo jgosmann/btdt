@@ -73,6 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Options::builder()
                     .enable_api_docs(settings.enable_api_docs)
                     .build(),
+                &settings.caches,
             )
             .with(ErrorLogMiddleware {}),
         )
