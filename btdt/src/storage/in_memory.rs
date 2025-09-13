@@ -7,7 +7,7 @@ mod path_iter;
 use super::in_memory::dir_node::{DirNode, Node};
 use super::in_memory::path_iter::PathIterExt;
 use crate::storage::in_memory::file_node::{FileReader, FileWriter};
-use crate::storage::{EntryType, Storage, StorageEntry};
+use crate::storage::{EntryType, FileHandle, Storage, StorageEntry};
 use crate::util::close::SelfClosing;
 use std::borrow::Cow;
 use std::io;
@@ -36,7 +36,8 @@ use std::sync::RwLock;
 /// writer.write_all(b"Hello, world!")?;
 /// writer.close()?;
 /// let mut buf = String::new();
-/// storage.get("/foo/bar")?.read_to_string(&mut buf)?;
+/// let mut reader = storage.get("/foo/bar")?.reader;
+/// reader.read_to_string(&mut buf)?;
 /// assert_eq!(buf, "Hello, world!");
 /// # Ok(())
 /// # }
@@ -99,13 +100,16 @@ impl Storage for InMemoryStorage {
         }
     }
 
-    fn get(&self, path: &str) -> io::Result<Self::Reader> {
+    fn get(&self, path: &str) -> io::Result<FileHandle<Self::Reader>> {
         let mut dir = &*self.root.read().unwrap();
         let mut components = path.path_components()?;
         for component in components.by_ref() {
             if component.is_last {
                 return match dir.get(component.name) {
-                    Some(Node::File(file)) => Ok(file.reader()),
+                    Some(Node::File(file)) => Ok(FileHandle {
+                        size_hint: file.size() as u64,
+                        reader: file.reader(),
+                    }),
                     Some(Node::Dir(_)) => {
                         Err(io::Error::new(ErrorKind::IsADirectory, "Is a directory"))
                     }
@@ -191,7 +195,18 @@ impl Storage for InMemoryStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::tests::write_file_to_storage;
     use crate::test_storage;
 
     test_storage!(in_memory_tests, InMemoryStorage::new());
+
+    #[test]
+    fn test_provides_size_hint() {
+        let storage = InMemoryStorage::new();
+        write_file_to_storage(&storage, "/dir/file.txt", "Hello, world!").unwrap();
+        assert_eq!(
+            storage.get("/dir/file.txt").unwrap().size_hint,
+            "Hello, world!".len() as u64
+        );
+    }
 }

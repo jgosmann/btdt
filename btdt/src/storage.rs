@@ -40,8 +40,8 @@ pub trait Storage {
     /// Checks if a file exists at the given path.
     fn exists_file(&self, path: &str) -> io::Result<bool>;
 
-    /// Returns a reader for the file at the given path.
-    fn get(&self, path: &str) -> io::Result<Self::Reader>;
+    /// Returns a `FileHandle` for the file at the given path.
+    fn get(&self, path: &str) -> io::Result<FileHandle<Self::Reader>>;
 
     /// Returns an iterator over the entries in the directory at the given path.
     fn list(&self, path: &str) -> io::Result<impl Iterator<Item = io::Result<StorageEntry<'_>>>>;
@@ -54,6 +54,15 @@ pub trait Storage {
     /// The implementation must ensure that the file becomes available atomically when
     /// [Close::close] is called. It also must create intermediate directories if necessary.
     fn put(&self, path: &str) -> io::Result<Self::Writer>;
+}
+
+/// A handle to a file in the storage, containing its size and a reader for its content.
+pub struct FileHandle<Reader: Read> {
+    /// The (approximate) size of the file in bytes.
+    pub size_hint: u64,
+
+    /// A reader for the file content.
+    pub reader: Reader,
 }
 
 /// The type of entry when listing a storage directory.

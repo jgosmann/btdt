@@ -3,7 +3,8 @@
 mod staged_file;
 
 use crate::storage::filesystem::staged_file::{StagedFile, clean_leftover_tmp_files};
-use crate::storage::{EntryType, Storage, StorageEntry};
+use crate::storage::{EntryType, FileHandle, Storage, StorageEntry};
+use fs2::FileExt;
 use rand::rngs::ThreadRng;
 use std::borrow::Cow;
 use std::fs::File;
@@ -46,7 +47,8 @@ use std::{fs, io};
 /// writer.write_all(b"Hello, world!")?;
 /// writer.close()?;
 /// let mut buf = String::new();
-/// storage.get("/foo/bar")?.read_to_string(&mut buf)?;
+/// let mut reader = storage.get("/foo/bar")?.reader;
+/// reader.read_to_string(&mut buf)?;
 /// assert_eq!(buf, "Hello, world!");
 /// # Ok(())
 /// # }
@@ -86,8 +88,12 @@ impl Storage for FilesystemStorage {
         }
     }
 
-    fn get(&self, path: &str) -> io::Result<Self::Reader> {
-        File::open(self.canonical_path(path)?)
+    fn get(&self, path: &str) -> io::Result<FileHandle<Self::Reader>> {
+        let file = File::open(self.canonical_path(path)?)?;
+        Ok(FileHandle {
+            size_hint: file.allocated_size()?,
+            reader: file,
+        })
     }
 
     fn exists_file(&self, path: &str) -> io::Result<bool> {
@@ -161,6 +167,8 @@ impl FilesystemStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::FileHandle;
+    use crate::storage::in_memory::InMemoryStorage;
     use crate::storage::tests::{read_file_from_storage_to_string, write_file_to_storage};
     use crate::test_storage;
     use std::fs::create_dir_all;
@@ -190,7 +198,7 @@ mod tests {
             self.storage.delete(path)
         }
 
-        fn get(&self, path: &str) -> io::Result<Self::Reader> {
+        fn get(&self, path: &str) -> io::Result<FileHandle<Self::Reader>> {
             self.storage.get(path)
         }
 
@@ -208,6 +216,14 @@ mod tests {
     }
 
     test_storage!(filesystem_tests, FilesystemStorageTestFixture::new());
+
+    #[test]
+    fn test_provides_size_hint() {
+        let storage = InMemoryStorage::new();
+        write_file_to_storage(&storage, "/dir/file.txt", "Hello, world!").unwrap();
+        // The exact value depends on the filesystem block size
+        assert!(storage.get("/dir/file.txt").unwrap().size_hint > 0);
+    }
 
     #[test]
     fn test_does_not_create_non_existent_root() {
