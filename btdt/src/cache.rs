@@ -46,4 +46,7 @@ pub struct CacheHit<'a, Reader: Read> {
 
     /// Reader for the cached data.
     pub reader: Reader,
+
+    /// (Approximate) size of the cached data in bytes.
+    pub size_hint: u64,
 }

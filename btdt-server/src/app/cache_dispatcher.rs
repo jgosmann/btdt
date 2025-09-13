@@ -17,14 +17,28 @@ impl Cache for CacheDispatcher {
 
     fn get<'a>(&self, keys: &[&'a str]) -> io::Result<Option<CacheHit<'a, Self::Reader>>> {
         Ok(match self {
-            Self::InMemory(cache) => cache.get(keys)?.map(|CacheHit { key, reader }| CacheHit {
-                key,
-                reader: Box::new(reader) as Box<dyn Read + Send>,
-            }),
-            Self::Filesystem(cache) => cache.get(keys)?.map(|CacheHit { key, reader }| CacheHit {
-                key,
-                reader: Box::new(reader) as Box<dyn Read + Send>,
-            }),
+            Self::InMemory(cache) => cache.get(keys)?.map(
+                |CacheHit {
+                     key,
+                     reader,
+                     size_hint,
+                 }| CacheHit {
+                    key,
+                    reader: Box::new(reader) as Box<dyn Read + Send>,
+                    size_hint,
+                },
+            ),
+            Self::Filesystem(cache) => cache.get(keys)?.map(
+                |CacheHit {
+                     key,
+                     reader,
+                     size_hint,
+                 }| CacheHit {
+                    key,
+                    reader: Box::new(reader) as Box<dyn Read + Send>,
+                    size_hint,
+                },
+            ),
         })
     }
 
