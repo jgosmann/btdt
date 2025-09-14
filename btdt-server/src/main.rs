@@ -3,8 +3,12 @@ use crate::config::BtdtServerConfig;
 use chrono::Local;
 use data_encoding::BASE64;
 use poem::listener::{BoxListener, Listener, NativeTlsConfig};
-use poem::{Endpoint, EndpointExt, Middleware, Request, Server, listener::TcpListener};
+use poem::{
+    Endpoint, EndpointExt, IntoResponse, Middleware, Request, Response, Server,
+    listener::TcpListener,
+};
 use std::borrow::Cow;
+use std::convert::Infallible;
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
@@ -27,7 +31,7 @@ impl<E: Endpoint> Middleware<E> for AccessLogMiddleware {
 }
 
 impl<E: Endpoint> Endpoint for AccessLogMiddlewareImpl<E> {
-    type Output = E::Output;
+    type Output = Response;
 
     async fn call(&self, req: Request) -> poem::Result<Self::Output> {
         let version = req.version();
@@ -73,11 +77,23 @@ impl<E: Endpoint> Endpoint for AccessLogMiddlewareImpl<E> {
             })
             .unwrap_or(Cow::Borrowed("-"));
         let time = Local::now().format("%d/%b/%Y:%H:%M:%S %z");
-        println!(
-            "{remote_addr} - {basic_auth_user} [{time}] \"{method} {original_uri} {version:?}\" - - \"{referer}\" \"{user_agent}\""
-        );
 
-        self.ep.call(req).await
+        let log_start = format!(
+            "{remote_addr} - {basic_auth_user} [{time}] \"{method} {original_uri} {version:?}\""
+        );
+        let log_end = format!("\"{referer}\" \"{user_agent}\"");
+
+        let result = self.ep.call(req).await.map(|res| res.into_response());
+        let status = result
+            .as_ref()
+            .map(|res| Cow::Owned(res.status().as_u16().to_string()))
+            .or_else(|err| {
+                Result::<_, Infallible>::Ok(Cow::Owned(err.status().as_u16().to_string()))
+            })
+            .unwrap_or(Cow::Borrowed("-"));
+
+        println!("{log_start} {status} - {log_end}");
+        result
     }
 }
 
