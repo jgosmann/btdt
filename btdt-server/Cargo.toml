@@ -2,6 +2,14 @@
 name = "btdt-server"
 version = "0.1.0"
 edition = "2024"
+authors = ["Jan Gosmann"]
+documentation = "https://jgosmann.github.io/btdt/"
+description = "Server component for \"been there, done that\" - a tool for flexible CI caching"
+repository = "https://github.com/jgosmann/btdt"
+license = "MIT OR Apache-2.0"
+keywords = ["ci", "cache", "tekton", "cli"]
+categories = ["caching"]
+readme = "../README.md"
 
 [lib]
 name = "asyncio"
