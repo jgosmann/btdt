@@ -56,6 +56,14 @@ impl<E: Endpoint> Endpoint for AccessLogMiddlewareImpl<E> {
             .headers()
             .get("Authorization")
             .and_then(|v| v.to_str().ok())
+            .and_then(|auth| auth.split_once(' '))
+            .and_then(|(scheme, credential)| {
+                if scheme.eq_ignore_ascii_case("basic") {
+                    Some(credential)
+                } else {
+                    None
+                }
+            })
             .and_then(|auth| BASE64.decode(auth.as_bytes()).ok())
             .and_then(|decoded_auth| {
                 decoded_auth
