@@ -1,5 +1,6 @@
 use config::builder::DefaultState;
 use config::{Config, ConfigBuilder, ConfigError, Environment, File, Map, Source};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 
@@ -55,8 +56,15 @@ impl ConfigLoader {
     }
 
     pub fn add_default_sources(self) -> Self {
-        self.add_file_source(File::with_name("/etc/btdt-server").required(false))
-            .add_environment_source(None)
+        self.add_file_source(
+            File::with_name(
+                &std::env::var("BTDT_SERVER_CONFIG_FILE")
+                    .map(Cow::Owned)
+                    .unwrap_or(Cow::Borrowed("/etc/btdt-server/config.toml")),
+            )
+            .required(false),
+        )
+        .add_environment_source(None)
     }
 
     pub fn add_file_source<T, F>(mut self, file: File<T, F>) -> Self
