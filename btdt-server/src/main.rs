@@ -1,12 +1,76 @@
 use crate::app::Options;
 use crate::config::BtdtServerConfig;
+use chrono::Local;
+use data_encoding::BASE64;
 use poem::listener::{BoxListener, Listener, NativeTlsConfig};
 use poem::{Endpoint, EndpointExt, Middleware, Request, Server, listener::TcpListener};
+use std::borrow::Cow;
 use std::fs::File;
 use std::io::Read;
 
 mod app;
 mod config;
+
+struct AccessLogMiddleware {}
+
+struct AccessLogMiddlewareImpl<E: Endpoint> {
+    ep: E,
+}
+
+impl<E: Endpoint> Middleware<E> for AccessLogMiddleware {
+    type Output = AccessLogMiddlewareImpl<E>;
+
+    fn transform(&self, ep: E) -> Self::Output {
+        AccessLogMiddlewareImpl { ep }
+    }
+}
+
+impl<E: Endpoint> Endpoint for AccessLogMiddlewareImpl<E> {
+    type Output = E::Output;
+
+    async fn call(&self, req: Request) -> poem::Result<Self::Output> {
+        let version = req.version();
+        let method = req.method();
+        let original_uri = req.original_uri();
+        let remote_addr = req
+            .remote_addr()
+            .as_socket_addr()
+            .map(|addr| Cow::Owned(addr.ip().to_string()))
+            .unwrap_or(Cow::Borrowed("-"));
+        let referer = req
+            .headers()
+            .get("Referer")
+            .and_then(|v| v.to_str().map(|r| Cow::Owned(r.replace('"', "\\\""))).ok())
+            .unwrap_or(Cow::Borrowed("-"));
+        let user_agent = req
+            .headers()
+            .get("User-Agent")
+            .and_then(|v| {
+                v.to_str()
+                    .map(|ua| Cow::Owned(ua.replace('"', "\\\"")))
+                    .ok()
+            })
+            .unwrap_or(Cow::Borrowed("-"));
+        let basic_auth_user = req
+            .headers()
+            .get("Authorization")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|auth| BASE64.decode(auth.as_bytes()).ok())
+            .and_then(|decoded_auth| {
+                decoded_auth
+                    .split(|&c| c == b':')
+                    .next()
+                    .map(|u| Cow::Owned(String::from_utf8_lossy(u).into_owned()))
+            })
+            .unwrap_or(Cow::Borrowed("-"));
+        let time = Local::now().format("%d/%b/%Y:%H:%M:%S %z");
+        println!(
+            "{remote_addr} - {basic_auth_user} [{time}] \"{method} {original_uri} {version:?}\" - - \"{referer}\" \"{user_agent}\""
+        );
+
+        self.ep.call(req).await
+    }
+}
 
 struct ErrorLogMiddleware {}
 
@@ -77,6 +141,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .build(),
                 &settings.caches,
             )
+            .with(AccessLogMiddleware {})
             .with(ErrorLogMiddleware {}),
         )
         .await?;

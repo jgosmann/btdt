@@ -245,8 +245,10 @@ version = "0.1.0"
 dependencies = [
  "btdt",
  "bytes 1.10.1",
+ "chrono",
  "config",
  "criterion",
+ "data-encoding",
  "fs2",
  "futures-core",
  "poem",
