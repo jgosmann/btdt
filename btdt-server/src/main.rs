@@ -26,10 +26,12 @@ impl<E: Endpoint> Endpoint for ErrorLogMiddlewareImpl<E> {
     type Output = E::Output;
 
     async fn call(&self, req: Request) -> poem::Result<Self::Output> {
+        let method = req.method().to_string();
+        let original_uri = req.original_uri().clone();
         match self.ep.call(req).await {
             Ok(response) => Ok(response),
             Err(err) => {
-                eprintln!("Error: {:?}", err);
+                eprintln!("Error in request for {method} {original_uri}: {err:?}");
                 Err(err)
             }
         }
