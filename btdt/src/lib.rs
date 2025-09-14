@@ -15,6 +15,7 @@
 //! This makes the [pipeline] module the high-level interface to the `btdt` library.
 
 pub mod cache;
+pub mod error;
 pub mod pipeline;
 pub mod storage;
 

@@ -8,8 +8,8 @@ pub mod in_memory;
 pub mod tests;
 
 use super::util::close::Close;
+use crate::error::IoPathResult;
 use std::borrow::Cow;
-use std::io;
 use std::io::{Read, Write};
 
 /// A storage is a place where files are stored, for example the local filesystem.
@@ -35,16 +35,19 @@ pub trait Storage {
     type Writer: Write + Close;
 
     /// Deletes the file at the given path.
-    fn delete(&self, path: &str) -> io::Result<()>;
+    fn delete(&self, path: &str) -> IoPathResult<()>;
 
     /// Checks if a file exists at the given path.
-    fn exists_file(&self, path: &str) -> io::Result<bool>;
+    fn exists_file(&self, path: &str) -> IoPathResult<bool>;
 
     /// Returns a `FileHandle` for the file at the given path.
-    fn get(&self, path: &str) -> io::Result<FileHandle<Self::Reader>>;
+    fn get(&self, path: &str) -> IoPathResult<FileHandle<Self::Reader>>;
 
     /// Returns an iterator over the entries in the directory at the given path.
-    fn list(&self, path: &str) -> io::Result<impl Iterator<Item = io::Result<StorageEntry<'_>>>>;
+    fn list(
+        &self,
+        path: &str,
+    ) -> IoPathResult<impl Iterator<Item = IoPathResult<StorageEntry<'_>>>>;
 
     /// Returns a writer for the file at the given path.
     ///
@@ -53,7 +56,7 @@ pub trait Storage {
     ///
     /// The implementation must ensure that the file becomes available atomically when
     /// [Close::close] is called. It also must create intermediate directories if necessary.
-    fn put(&self, path: &str) -> io::Result<Self::Writer>;
+    fn put(&self, path: &str) -> IoPathResult<Self::Writer>;
 }
 
 /// A handle to a file in the storage, containing its size and a reader for its content.

@@ -2,8 +2,8 @@
 //!
 //! This module defines the `Cache` trait and provides implementations of it in its submodules.
 
+use crate::error::IoPathResult;
 use crate::util::close::Close;
-use std::io;
 use std::io::{Read, Write};
 
 pub mod blob_id;
@@ -28,7 +28,7 @@ pub trait Cache {
 
     /// Returns a reader for the data stored under the first given key found in the cache. If none
     /// of the keys is found, `Ok(None)` is returned.
-    fn get<'a>(&self, keys: &[&'a str]) -> io::Result<Option<CacheHit<'a, Self::Reader>>>;
+    fn get<'a>(&self, keys: &[&'a str]) -> IoPathResult<Option<CacheHit<'a, Self::Reader>>>;
 
     /// Returns a writer for the data to be stored under all the given keys.
     ///
@@ -36,7 +36,7 @@ pub trait Cache {
     ///
     /// The writer must be finalized by calling [Close::close] to make the data available
     /// atomically.
-    fn set(&self, keys: &[&str]) -> io::Result<Self::Writer>;
+    fn set(&self, keys: &[&str]) -> IoPathResult<Self::Writer>;
 }
 
 /// Returned on a successful cache get operation.

@@ -4,6 +4,7 @@ use btdt::pipeline::Pipeline;
 use btdt::storage::filesystem::FilesystemStorage;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
+use std::error::Error;
 use std::fs::{File, create_dir_all, read_dir, remove_dir_all};
 use std::io::Write;
 use std::path::Path;
@@ -15,7 +16,7 @@ pub struct CacheFixture {
 }
 
 impl CacheFixture {
-    pub fn new() -> io::Result<Self> {
+    pub fn new() -> Result<Self, Box<dyn Error>> {
         let cache_dir = tempdir()?;
         let mut cache_pipeline = Pipeline::new(LocalCache::with_blob_id_factory(
             FilesystemStorage::new(cache_dir.path().to_path_buf()),

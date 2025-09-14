@@ -6,6 +6,7 @@ mod path_iter;
 
 use super::in_memory::dir_node::{DirNode, Node};
 use super::in_memory::path_iter::PathIterExt;
+use crate::error::{IoPathResult, WithPath};
 use crate::storage::in_memory::file_node::{FileReader, FileWriter};
 use crate::storage::{EntryType, FileHandle, Storage, StorageEntry};
 use crate::util::close::SelfClosing;
@@ -26,6 +27,7 @@ use std::sync::RwLock;
 /// ```rust
 /// # use std::io;
 /// use std::io::{Read, Write};
+/// use btdt::error::WithPath;
 /// use btdt::storage::in_memory::InMemoryStorage;
 /// use btdt::storage::Storage;
 /// use btdt::util::close::Close;
@@ -66,9 +68,9 @@ impl Storage for InMemoryStorage {
     type Reader = FileReader;
     type Writer = SelfClosing<FileWriter>;
 
-    fn delete(&self, path: &str) -> io::Result<()> {
+    fn delete(&self, path: &str) -> IoPathResult<()> {
         let mut dir = &mut *self.root.write().unwrap();
-        for component in path.path_components()? {
+        for (i, component) in path.path_components().with_path(path)?.enumerate() {
             if component.is_last {
                 return dir.delete(component.name);
             }
@@ -79,7 +81,8 @@ impl Storage for InMemoryStorage {
                     return Err(io::Error::new(
                         ErrorKind::NotFound,
                         "No such file or directory",
-                    ));
+                    ))
+                    .with_path(first_n_path_components(path, i + 1)?);
                 }
             };
         }
@@ -88,22 +91,23 @@ impl Storage for InMemoryStorage {
             ErrorKind::InvalidInput,
             "Must not delete root directory",
         ))
+        .with_path(path)
     }
 
-    fn exists_file(&self, path: &str) -> io::Result<bool> {
+    fn exists_file(&self, path: &str) -> IoPathResult<bool> {
         match self.get(path) {
             Ok(_) => Ok(true),
-            Err(err) => match err.kind() {
+            Err(err) => match err.io_error().kind() {
                 ErrorKind::IsADirectory | ErrorKind::NotFound => Ok(false),
                 _ => Err(err),
             },
         }
     }
 
-    fn get(&self, path: &str) -> io::Result<FileHandle<Self::Reader>> {
+    fn get(&self, path: &str) -> IoPathResult<FileHandle<Self::Reader>> {
         let mut dir = &*self.root.read().unwrap();
-        let mut components = path.path_components()?;
-        for component in components.by_ref() {
+        let mut components = path.path_components().with_path(path)?;
+        for (i, component) in components.by_ref().enumerate() {
             if component.is_last {
                 return match dir.get(component.name) {
                     Some(Node::File(file)) => Ok(FileHandle {
@@ -112,8 +116,10 @@ impl Storage for InMemoryStorage {
                     }),
                     Some(Node::Dir(_)) => {
                         Err(io::Error::new(ErrorKind::IsADirectory, "Is a directory"))
+                            .with_path(first_n_path_components(path, i + 1)?)
                     }
-                    _ => Err(io::Error::new(ErrorKind::NotFound, "File not found")),
+                    _ => Err(io::Error::new(ErrorKind::NotFound, "File not found"))
+                        .with_path(first_n_path_components(path, i + 1)?),
                 };
             }
 
@@ -123,7 +129,8 @@ impl Storage for InMemoryStorage {
                     return Err(io::Error::new(
                         ErrorKind::NotFound,
                         "No such file or directory",
-                    ));
+                    ))
+                    .with_path(first_n_path_components(path, i + 1)?);
                 }
             };
         }
@@ -132,23 +139,30 @@ impl Storage for InMemoryStorage {
             ErrorKind::InvalidInput,
             "Path must contain at least one component",
         ))
+        .with_path(path)
     }
 
-    fn list(&self, path: &str) -> io::Result<impl Iterator<Item = io::Result<StorageEntry<'_>>>> {
+    fn list(
+        &self,
+        path: &str,
+    ) -> IoPathResult<impl Iterator<Item = IoPathResult<StorageEntry<'_>>>> {
         let mut dir = &*self.root.read().unwrap();
-        for component in path.path_components()? {
+        for (i, component) in path.path_components().with_path(path)?.enumerate() {
             dir = match dir.get(component.name) {
                 Some(Node::Dir(dir)) => dir,
                 child => {
+                    let err_path = first_n_path_components(path, i + 1)?;
                     if component.is_last
                         && let Some(Node::File(_)) = child
                     {
-                        return Err(io::Error::new(ErrorKind::NotADirectory, "Not a directory"));
+                        return Err(io::Error::new(ErrorKind::NotADirectory, "Not a directory"))
+                            .with_path(err_path);
                     }
                     return Err(io::Error::new(
                         ErrorKind::NotFound,
                         "No such file or directory",
-                    ));
+                    ))
+                    .with_path(err_path);
                 }
             };
         }
@@ -172,24 +186,33 @@ impl Storage for InMemoryStorage {
             .into_iter())
     }
 
-    fn put(&self, path: &str) -> io::Result<Self::Writer> {
+    fn put(&self, path: &str) -> IoPathResult<Self::Writer> {
         let mut dir = &mut *self.root.write().unwrap();
-        let mut components = path.path_components()?;
+        let mut components = path.path_components().with_path(path)?;
         for component in components.by_ref() {
             if component.is_last {
-                return dir
-                    .create_file(component.name.to_string())
-                    .map(SelfClosing::new);
+                return dir.create_file(component.name).map(SelfClosing::new);
             }
 
-            dir = dir.get_or_insert_dir(component.name.to_string())?;
+            dir = dir.get_or_insert_dir(component.name)?;
         }
 
         Err(io::Error::new(
             ErrorKind::InvalidInput,
             "Path must contain at least one component",
         ))
+        .with_path(path)
     }
+}
+
+fn first_n_path_components(path: &str, n: usize) -> IoPathResult<String> {
+    let components: Vec<_> = path
+        .path_components()
+        .with_path(path)?
+        .take(n)
+        .map(|c| c.name)
+        .collect();
+    Ok(components.join("/"))
 }
 
 #[cfg(test)]

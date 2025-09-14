@@ -4,7 +4,8 @@ stderr = """
 Error: Could not cache: source
 
 Caused by:
-    No such file or directory (os error 2)
+    0: I/O error on path source: No such file or directory (os error 2)
+    1: No such file or directory (os error 2)
 """
 status.code = 1
 fs.sandbox = true

@@ -1,3 +1,4 @@
+use crate::error::{IoPathResult, WithPath};
 use crate::util::close::Close;
 use crate::util::encoding::ICASE_NOPAD_ALPHANUMERIC_ENCODING;
 use data_encoding::Encoding;
@@ -25,7 +26,7 @@ pub struct StagedFile<P: AsRef<Path>> {
 }
 
 impl<P: AsRef<Path>> StagedFile<P> {
-    pub fn new<R: CryptoRng + RngCore>(target_path: P, rng: &mut R) -> io::Result<Self> {
+    pub fn new<R: CryptoRng + RngCore>(target_path: P, rng: &mut R) -> IoPathResult<Self> {
         let mut bytes = [0; TMP_FILE_SUFFIX_BYTES];
         rng.fill_bytes(&mut bytes);
         Self::new_with_suffix(
@@ -34,12 +35,13 @@ impl<P: AsRef<Path>> StagedFile<P> {
         )
     }
 
-    fn new_with_suffix(target_path: P, suffix: &str) -> io::Result<Self> {
+    fn new_with_suffix(target_path: P, suffix: &str) -> IoPathResult<Self> {
         let filename = target_path
             .as_ref()
             .file_name()
             .and_then(OsStr::to_str)
-            .ok_or(io::Error::new(ErrorKind::InvalidInput, "Invalid filename"))?;
+            .ok_or(io::Error::new(ErrorKind::InvalidInput, "Invalid filename"))
+            .with_path(target_path.as_ref())?;
         let tmp_path = target_path
             .as_ref()
             .with_file_name(format!("{filename}.tmp.{suffix}"));
@@ -47,8 +49,9 @@ impl<P: AsRef<Path>> StagedFile<P> {
             let file = OpenOptions::new()
                 .create_new(true)
                 .write(true)
-                .open(&tmp_path)?;
-            file.lock_exclusive()?;
+                .open(&tmp_path)
+                .with_path(&tmp_path)?;
+            file.lock_exclusive().with_path(&tmp_path)?;
             if !tmp_path.exists() {
                 // The file was deleted, likely by clean_leftover_tmp_files, before we could lock
                 // it. Try again.
@@ -61,7 +64,7 @@ impl<P: AsRef<Path>> StagedFile<P> {
                 finalized: false,
             });
         }
-        Err(io::Error::other("Failed to create and lock temporary file"))
+        Err(io::Error::other("Failed to create and lock temporary file")).with_path(&tmp_path)
     }
 
     fn finalize(&mut self) -> io::Result<()> {

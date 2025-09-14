@@ -2,8 +2,8 @@
 //! them in TAR format and potentially compressing them.
 
 use crate::cache::Cache;
+use crate::error::{IoPathResult, WithPath};
 use crate::util::close::Close;
-use std::io;
 use std::io::BufWriter;
 use std::path::Path;
 
@@ -15,10 +15,11 @@ use std::path::Path;
 /// # use std::fs;
 /// # use std::io;
 /// use btdt::cache::local::LocalCache;
+/// # use btdt::error::IoPathResult;
 /// use btdt::pipeline::Pipeline;
 /// use btdt::storage::in_memory::InMemoryStorage;
 ///
-/// # fn main() -> io::Result<()> {
+/// # fn main() -> IoPathResult<()> {
 /// # const CACHEABLE_PATH: &str = "/tmp/btdt-cacheable";
 /// # struct CacheableDir;
 /// # impl CacheableDir {
@@ -61,9 +62,11 @@ impl<C: Cache> Pipeline<C> {
         &self,
         keys: &[&'a str],
         destination: impl AsRef<Path>,
-    ) -> io::Result<Option<&'a str>> {
+    ) -> IoPathResult<Option<&'a str>> {
         if let Some(cache_hit) = self.cache.get(keys)? {
-            tar::Archive::new(cache_hit.reader).unpack(destination.as_ref())?;
+            tar::Archive::new(cache_hit.reader)
+                .unpack(destination.as_ref())
+                .with_path(destination.as_ref())?;
             Ok(Some(cache_hit.key))
         } else {
             Ok(None)
@@ -74,15 +77,21 @@ impl<C: Cache> Pipeline<C> {
     ///
     /// The files in the directory specified by `source` are archived and stored in the cache under
     /// the given keys.
-    pub fn store(&mut self, keys: &[&str], source: impl AsRef<Path>) -> io::Result<()> {
+    pub fn store(&mut self, keys: &[&str], source: impl AsRef<Path>) -> IoPathResult<()> {
         let mut writer = BufWriter::new(self.cache.set(keys)?);
         {
             let mut archive = tar::Builder::new(&mut writer);
             archive.follow_symlinks(false);
-            archive.append_dir_all(".", source)?;
-            archive.finish()?;
+            archive
+                .append_dir_all(".", source.as_ref())
+                .with_path(source.as_ref())?;
+            archive.finish().with_path(source.as_ref())?;
         }
-        writer.into_inner()?.close()?;
+        writer
+            .into_inner()
+            .map_err(|e| e.into())
+            .and_then(Close::close)
+            .with_path(source.as_ref())?;
         Ok(())
     }
 

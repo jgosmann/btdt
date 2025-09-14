@@ -1,7 +1,6 @@
 use asyncio::StreamAdapter;
 use btdt::test_util::fs::CreateFilled;
 use criterion::{Criterion, criterion_group, criterion_main};
-use fs2::FileExt;
 use rand_core::{RngCore, SeedableRng};
 use rand_xoshiro::Xoshiro256PlusPlus;
 use std::fs::File;

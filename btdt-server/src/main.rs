@@ -5,6 +5,7 @@ use data_encoding::BASE64;
 use poem::listener::{BoxListener, Listener, NativeTlsConfig};
 use poem::{Endpoint, EndpointExt, Middleware, Request, Server, listener::TcpListener};
 use std::borrow::Cow;
+use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 
@@ -95,7 +96,8 @@ impl<E: Endpoint> Endpoint for ErrorLogMiddlewareImpl<E> {
         match self.ep.call(req).await {
             Ok(response) => Ok(response),
             Err(err) => {
-                eprintln!("Error in request for {method} {original_uri}: {err:?}");
+                let source = err.source().unwrap_or(&err);
+                eprintln!("Error in request for {method} {original_uri}: {source:?}");
                 Err(err)
             }
         }

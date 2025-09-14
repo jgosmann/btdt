@@ -1,4 +1,5 @@
 use super::file_node::{FileNode, FileWriter};
+use crate::error::{IoPathError, IoPathResult};
 use std::collections::HashMap;
 use std::io;
 use std::io::ErrorKind;
@@ -34,37 +35,47 @@ impl DirNode {
         self.0.get_mut(name)
     }
 
-    pub fn get_or_insert_dir(&mut self, name: String) -> io::Result<&mut DirNode> {
-        match self.0.entry(name).or_insert(Node::Dir(DirNode::new())) {
+    pub fn get_or_insert_dir(&mut self, name: &str) -> IoPathResult<&mut DirNode> {
+        match self
+            .0
+            .entry(name.to_string())
+            .or_insert(Node::Dir(DirNode::new()))
+        {
             Node::Dir(dir) => Ok(dir),
-            _ => Err(io::Error::new(ErrorKind::NotADirectory, "Not a directory")),
+            _ => Err(IoPathError::new(
+                io::Error::new(ErrorKind::NotADirectory, "Not a directory"),
+                name,
+            )),
         }
     }
 
-    pub fn delete(&mut self, name: &str) -> io::Result<()> {
+    pub fn delete(&mut self, name: &str) -> IoPathResult<()> {
         if let Some(node) = self.0.get(name) {
             if let Node::Dir(dir) = node
                 && !dir.is_empty()
             {
-                return Err(io::Error::new(
-                    ErrorKind::DirectoryNotEmpty,
-                    "Directory must be empty to be deleted",
+                return Err(IoPathError::new(
+                    io::Error::new(
+                        ErrorKind::DirectoryNotEmpty,
+                        "Directory must be empty to be deleted",
+                    ),
+                    name,
                 ));
             }
             self.0.remove(name);
             Ok(())
         } else {
-            Err(io::Error::new(
-                ErrorKind::NotFound,
-                "No such file or directory",
+            Err(IoPathError::new(
+                io::Error::new(ErrorKind::NotFound, "No such file or directory"),
+                name,
             ))
         }
     }
 
-    pub fn create_file(&mut self, name: String) -> io::Result<FileWriter> {
+    pub fn create_file(&mut self, name: &str) -> IoPathResult<FileWriter> {
         let node = self
             .0
-            .entry(name)
+            .entry(name.to_string())
             .and_modify(|node| {
                 if let Node::File(_) = node {
                     *node = Node::File(Arc::new(FileNode::new()));
@@ -73,9 +84,12 @@ impl DirNode {
             .or_insert(Node::File(Arc::new(FileNode::new())));
         match node {
             Node::File(file) => Ok(file.writer()),
-            Node::Dir(_) => Err(io::Error::new(
-                ErrorKind::IsADirectory,
-                "A directory with the same name already exists",
+            Node::Dir(_) => Err(IoPathError::new(
+                io::Error::new(
+                    ErrorKind::IsADirectory,
+                    "A directory with the same name already exists",
+                ),
+                name,
             )),
         }
     }

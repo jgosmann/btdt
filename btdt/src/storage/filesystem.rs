@@ -2,6 +2,7 @@
 
 mod staged_file;
 
+use crate::error::{IoPathError, IoPathResult, WithPath};
 use crate::storage::filesystem::staged_file::{StagedFile, clean_leftover_tmp_files};
 use crate::storage::{EntryType, FileHandle, Storage, StorageEntry};
 use fs2::FileExt;
@@ -22,6 +23,7 @@ use std::{fs, io};
 /// # use std::io;
 /// # use std::fs;
 /// use std::io::{Read, Write};
+/// use btdt::error::WithPath;
 /// use btdt::storage::filesystem::FilesystemStorage;
 /// use btdt::storage::Storage;
 /// use btdt::util::close::Close;
@@ -41,7 +43,7 @@ use std::{fs, io};
 /// # }
 ///
 /// # fn main() -> io::Result<()> {
-/// # let _storage_dir = StorageDir::new();
+/// let _storage_dir = StorageDir::new();
 /// let mut storage = FilesystemStorage::new(STORAGE_PATH.into());
 /// let mut writer = storage.put("/foo/bar")?;
 /// writer.write_all(b"Hello, world!")?;
@@ -79,45 +81,59 @@ impl Storage for FilesystemStorage {
     type Reader = File;
     type Writer = StagedFile<PathBuf>;
 
-    fn delete(&self, path: &str) -> io::Result<()> {
+    fn delete(&self, path: &str) -> IoPathResult<()> {
         let full_path = self.canonical_path(path)?;
         if full_path.is_dir() {
-            fs::remove_dir(full_path)
+            fs::remove_dir(&full_path).with_path(&full_path)
         } else {
-            fs::remove_file(full_path)
+            fs::remove_file(&full_path).with_path(&full_path)
         }
     }
 
-    fn get(&self, path: &str) -> io::Result<FileHandle<Self::Reader>> {
-        let file = File::open(self.canonical_path(path)?)?;
+    fn get(&self, path: &str) -> IoPathResult<FileHandle<Self::Reader>> {
+        let canonical_path = self.canonical_path(path)?;
+        let file = File::open(&canonical_path).with_path(&canonical_path)?;
         Ok(FileHandle {
-            size_hint: file.allocated_size()?,
+            size_hint: file.allocated_size().with_path(&canonical_path)?,
             reader: file,
         })
     }
 
-    fn exists_file(&self, path: &str) -> io::Result<bool> {
+    fn exists_file(&self, path: &str) -> IoPathResult<bool> {
         Ok(self.canonical_path(path)?.is_file())
     }
 
-    fn list(&self, path: &str) -> io::Result<impl Iterator<Item = io::Result<StorageEntry<'_>>>> {
-        Ok(self
-            .canonical_path(path)?
-            .read_dir()?
-            .map(|entry| {
-                let entry = entry?;
-                if let Some(entry_type) = match entry.file_type()? {
+    fn list(
+        &self,
+        path: &str,
+    ) -> IoPathResult<impl Iterator<Item = IoPathResult<StorageEntry<'_>>>> {
+        let canonical_path = self.canonical_path(path)?;
+        Ok(canonical_path
+            .read_dir()
+            .with_path(&canonical_path)?
+            .map(move |entry| {
+                let entry = entry.with_path(&canonical_path)?;
+                if let Some(entry_type) = match entry.file_type().with_path(entry.path())? {
                     file_type if file_type.is_file() => Some(EntryType::File),
                     file_type if file_type.is_dir() => Some(EntryType::Directory),
                     _ => None,
                 } {
                     Ok(Some(StorageEntry {
-                        name: Cow::Owned(entry.file_name().into_string().map_err(|_| {
-                            io::Error::new(ErrorKind::InvalidData, "File name is not valid Unicode")
-                        })?),
+                        name: Cow::Owned(
+                            entry
+                                .file_name()
+                                .into_string()
+                                .map_err(|_| {
+                                    io::Error::new(
+                                        ErrorKind::InvalidData,
+                                        "File name is not valid Unicode",
+                                    )
+                                })
+                                .with_path(entry.path())?,
+                        ),
                         entry_type,
-                        size: if entry.file_type()?.is_file() {
-                            entry.metadata()?.len()
+                        size: if entry.file_type().with_path(entry.path())?.is_file() {
+                            entry.metadata().with_path(entry.path())?.len()
                         } else {
                             0
                         },
@@ -129,7 +145,7 @@ impl Storage for FilesystemStorage {
             .filter_map(Result::transpose))
     }
 
-    fn put(&self, path: &str) -> io::Result<Self::Writer> {
+    fn put(&self, path: &str) -> IoPathResult<Self::Writer> {
         let canonical_path = self.canonical_path(path)?;
         if self.root.exists()
             && let Some(parent_dir) = canonical_path.parent()
@@ -137,14 +153,17 @@ impl Storage for FilesystemStorage {
             let mut path = PathBuf::new();
             for component in parent_dir.components() {
                 if component == Component::ParentDir {
-                    return Err(io::Error::new(
-                        ErrorKind::InvalidInput,
-                        "Path must not contain parent directory components",
+                    return Err(IoPathError::new(
+                        io::Error::new(
+                            ErrorKind::InvalidInput,
+                            "Path must not contain parent directory components",
+                        ),
+                        path,
                     ));
                 }
                 path = path.join(component);
                 if !path.exists() {
-                    fs::create_dir(&path)?;
+                    fs::create_dir(&path).with_path(&path)?;
                 }
             }
         }
@@ -153,11 +172,14 @@ impl Storage for FilesystemStorage {
 }
 
 impl FilesystemStorage {
-    fn canonical_path(&self, path: &str) -> io::Result<PathBuf> {
+    fn canonical_path(&self, path: &str) -> IoPathResult<PathBuf> {
         if !path.starts_with('/') {
-            return Err(io::Error::new(
-                ErrorKind::InvalidInput,
-                "Path must be absolute, i.e. start with a slash '/'",
+            return Err(IoPathError::new(
+                io::Error::new(
+                    ErrorKind::InvalidInput,
+                    "Path must be absolute, i.e. start with a slash '/'",
+                ),
+                path,
             ));
         }
         Ok(self.root.join(&path[1..]))
@@ -194,23 +216,26 @@ mod tests {
         type Reader = <FilesystemStorage as Storage>::Reader;
         type Writer = <FilesystemStorage as Storage>::Writer;
 
-        fn delete(&self, path: &str) -> io::Result<()> {
+        fn delete(&self, path: &str) -> IoPathResult<()> {
             self.storage.delete(path)
         }
 
-        fn get(&self, path: &str) -> io::Result<FileHandle<Self::Reader>> {
+        fn get(&self, path: &str) -> IoPathResult<FileHandle<Self::Reader>> {
             self.storage.get(path)
         }
 
-        fn exists_file(&self, path: &str) -> io::Result<bool> {
+        fn exists_file(&self, path: &str) -> IoPathResult<bool> {
             self.storage.exists_file(path)
         }
 
-        fn list(&self, path: &str) -> io::Result<impl Iterator<Item = io::Result<StorageEntry>>> {
+        fn list(
+            &self,
+            path: &str,
+        ) -> IoPathResult<impl Iterator<Item = IoPathResult<StorageEntry<'_>>>> {
             self.storage.list(path)
         }
 
-        fn put(&self, path: &str) -> io::Result<Self::Writer> {
+        fn put(&self, path: &str) -> IoPathResult<Self::Writer> {
             self.storage.put(path)
         }
     }
@@ -233,6 +258,7 @@ mod tests {
         assert_eq!(
             write_file_to_storage(&mut storage, "/file.txt", "Hello, world!")
                 .unwrap_err()
+                .io_error()
                 .kind(),
             ErrorKind::NotFound
         );

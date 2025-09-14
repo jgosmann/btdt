@@ -1,5 +1,6 @@
 use btdt::cache::local::LocalCache;
 use btdt::cache::{Cache, CacheHit};
+use btdt::error::IoPathResult;
 use btdt::storage::filesystem::FilesystemStorage;
 use btdt::storage::in_memory::InMemoryStorage;
 use btdt::util::close::Close;
@@ -15,7 +16,7 @@ impl Cache for CacheDispatcher {
     type Reader = Box<dyn Read + Send>;
     type Writer = CacheWriter;
 
-    fn get<'a>(&self, keys: &[&'a str]) -> io::Result<Option<CacheHit<'a, Self::Reader>>> {
+    fn get<'a>(&self, keys: &[&'a str]) -> IoPathResult<Option<CacheHit<'a, Self::Reader>>> {
         Ok(match self {
             Self::InMemory(cache) => cache.get(keys)?.map(
                 |CacheHit {
@@ -42,7 +43,7 @@ impl Cache for CacheDispatcher {
         })
     }
 
-    fn set(&self, keys: &[&str]) -> io::Result<Self::Writer> {
+    fn set(&self, keys: &[&str]) -> IoPathResult<Self::Writer> {
         match self {
             Self::InMemory(cache) => cache.set(keys).map(CacheWriter::InMemory),
             Self::Filesystem(cache) => cache.set(keys).map(CacheWriter::Filesystem),

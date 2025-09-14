@@ -3,6 +3,7 @@
 use super::blob_id::{BlobId, BlobIdFactory, RngBytes, ThreadRng};
 use super::meta::{META_MAX_SIZE, Meta};
 use super::{Cache, CacheHit};
+use crate::error::{IoPathError, IoPathResult, WithPath};
 use crate::storage::{EntryType, Storage};
 use crate::util::clock::{Clock, SystemClock};
 use crate::util::close::Close;
@@ -27,11 +28,13 @@ use std::pin::Pin;
 /// # use std::io;
 /// use std::io::{Read, Write};
 /// use btdt::cache::local::LocalCache;
+/// # use btdt::error::IoPathResult;
 /// use btdt::storage::in_memory::InMemoryStorage;
 /// use btdt::util::close::Close;
 ///
 /// # fn main() -> io::Result<()> {
 /// use btdt::cache::Cache;
+/// use btdt::error::WithPath;
 /// let mut cache = LocalCache::new(InMemoryStorage::new());
 /// let mut writer = cache.set(&["cache-key"])?;
 /// writer.write_all(b"Hello, world!")?;
@@ -102,7 +105,7 @@ impl<S: Storage, C: Clock, R: RngBytes> Cache for LocalCache<S, C, R> {
     type Reader = S::Reader;
     type Writer = CacheWriter<S, AlignedVec>;
 
-    fn get<'a>(&self, keys: &[&'a str]) -> io::Result<Option<CacheHit<'a, Self::Reader>>> {
+    fn get<'a>(&self, keys: &[&'a str]) -> IoPathResult<Option<CacheHit<'a, Self::Reader>>> {
         for key in keys {
             let meta_path = Self::meta_path(key);
             let meta = self.read_meta(&meta_path);
@@ -110,8 +113,10 @@ impl<S: Storage, C: Clock, R: RngBytes> Cache for LocalCache<S, C, R> {
                 Ok(mut meta) => {
                     meta.set_latest_access(self.clock.now());
                     let mut writer = self.storage.put(&meta_path)?;
-                    writer.write_all(meta.deref().as_ref())?;
-                    writer.close()?;
+                    writer
+                        .write_all(meta.deref().as_ref())
+                        .with_path(&meta_path)?;
+                    writer.close().with_path(&meta_path)?;
 
                     let blob_path = Self::blob_path(meta.blob_id());
                     match self.storage.get(&blob_path) {
@@ -122,13 +127,13 @@ impl<S: Storage, C: Clock, R: RngBytes> Cache for LocalCache<S, C, R> {
                                 size_hint: file_handle.size_hint,
                             }));
                         }
-                        Err(err) => match err.kind() {
+                        Err(err) => match err.io_error().kind() {
                             ErrorKind::NotFound => continue,
                             _ => return Err(err),
                         },
                     }
                 }
-                Err(err) => match err.kind() {
+                Err(err) => match err.io_error().kind() {
                     ErrorKind::NotFound => continue,
                     _ => return Err(err),
                 },
@@ -137,7 +142,7 @@ impl<S: Storage, C: Clock, R: RngBytes> Cache for LocalCache<S, C, R> {
         Ok(None)
     }
 
-    fn set(&self, keys: &[&str]) -> io::Result<Self::Writer> {
+    fn set(&self, keys: &[&str]) -> IoPathResult<Self::Writer> {
         let blob_id = self.blob_id_factory.new_id();
         let meta = Meta::new(blob_id, self.clock.now());
         let blob_path = Self::blob_path(&blob_id);
@@ -146,7 +151,7 @@ impl<S: Storage, C: Clock, R: RngBytes> Cache for LocalCache<S, C, R> {
             .iter()
             .map(|&key| Self::meta_path(key))
             .map(|key| self.storage.put(&key))
-            .collect::<io::Result<Vec<_>>>()?;
+            .collect::<IoPathResult<Vec<_>>>()?;
         Ok(CacheWriter::new(blob_writer, meta_writers, meta))
     }
 }
@@ -156,7 +161,7 @@ impl<S: Storage, C: Clock, R: RngBytes> LocalCache<S, C, R> {
         &mut self,
         max_unused_age: Option<TimeDelta>,
         max_blob_size_sum: Option<u64>,
-    ) -> io::Result<()> {
+    ) -> IoPathResult<()> {
         if max_unused_age.is_none() && max_blob_size_sum.is_none() {
             return Ok(());
         }
@@ -184,9 +189,9 @@ impl<S: Storage, C: Clock, R: RngBytes> LocalCache<S, C, R> {
         for key_file in Self::iter_subdir_files(&self.storage, "/meta")? {
             let key_file = key_file?;
             let meta = self.read_meta(&key_file.path)?;
-            let latest_access = meta
-                .latest_access()
-                .map_err(|err| io::Error::new(ErrorKind::InvalidData, format!("{err:?}")))?;
+            let latest_access = meta.latest_access().map_err(|err| {
+                IoPathError::new_no_path(io::Error::new(ErrorKind::InvalidData, format!("{err:?}")))
+            })?;
             if let Some(&size) = blob_sizes.get(meta.blob_id()) {
                 let entry = blobs.entry(*meta.blob_id()).or_insert_with(|| Blob {
                     latest_access: Reverse(latest_access),
@@ -229,19 +234,20 @@ impl<S: Storage, C: Clock, R: RngBytes> LocalCache<S, C, R> {
         Ok(())
     }
 
-    fn read_meta(&self, path: &str) -> io::Result<Pin<Box<Meta<[u8; META_MAX_SIZE]>>>> {
+    fn read_meta(&self, path: &str) -> IoPathResult<Pin<Box<Meta<[u8; META_MAX_SIZE]>>>> {
         let mut reader = self.storage.get(path)?.reader;
         let mut meta_data = [0u8; META_MAX_SIZE];
-        reader.read_exact(meta_data.as_mut())?;
-        Meta::from_bytes(meta_data)
-            .map_err(|err| io::Error::new(ErrorKind::InvalidData, format!("{err:?}")))
+        reader.read_exact(meta_data.as_mut()).no_path()?;
+        Meta::from_bytes(meta_data).map_err(|err| {
+            IoPathError::new_no_path(io::Error::new(ErrorKind::InvalidData, format!("{err:?}")))
+        })
     }
 
     fn iter_subdir_files<'a>(
         storage: &'a S,
         path: &'a str,
-    ) -> io::Result<impl Iterator<Item = io::Result<SubdirFile>> + use<'a, S, C, R>> {
-        let path_entries = storage.list(path)?.collect::<io::Result<Vec<_>>>()?;
+    ) -> IoPathResult<impl Iterator<Item = IoPathResult<SubdirFile>> + use<'a, S, C, R>> {
+        let path_entries = storage.list(path)?.collect::<IoPathResult<Vec<_>>>()?;
         Ok(path_entries.into_iter().flat_map(move |path_entry| {
             if path_entry.entry_type != EntryType::Directory {
                 return vec![].into_iter();
@@ -502,10 +508,13 @@ mod tests {
         cache: &mut C,
         keys: &[&str],
         content: &str,
-    ) -> io::Result<()> {
+    ) -> IoPathResult<()> {
         let mut writer = cache.set(keys)?;
-        writer.write_all(content.as_bytes())?;
-        writer.close()
+        let pseudo_path = keys.join(", ");
+        writer
+            .write_all(content.as_bytes())
+            .with_path(&pseudo_path)?;
+        writer.close().with_path(&pseudo_path)
     }
 
     fn assert_cache_entry_with_content<C: Cache>(
@@ -544,7 +553,7 @@ mod tests {
         let blob_dirs = storage
             .list("/blob")
             .unwrap()
-            .collect::<io::Result<Vec<_>>>()
+            .collect::<IoPathResult<Vec<_>>>()
             .unwrap();
         assert_eq!(
             blob_dirs

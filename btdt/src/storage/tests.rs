@@ -1,5 +1,5 @@
+use crate::error::{IoPathResult, WithPath};
 use crate::storage::Storage;
-use std::io;
 use std::io::{Read, Write};
 
 #[macro_export]
@@ -15,21 +15,21 @@ macro_rules! test_storage {
             fn test_get_returns_error_for_non_existent_file() {
                 let storage = $constructor;
                 let result = storage.get("/non-existent-file.txt");
-                assert_eq!(result.err().unwrap().kind(), ErrorKind::NotFound);
+                assert_eq!(result.err().unwrap().io_error().kind(), ErrorKind::NotFound);
             }
 
             #[test]
             fn test_list_returns_error_for_non_existent_dir() {
                 let storage = $constructor;
                 let result = storage.list("/non-existent-dir");
-                assert_eq!(result.err().unwrap().kind(), ErrorKind::NotFound);
+                assert_eq!(result.err().unwrap().io_error().kind(), ErrorKind::NotFound);
             }
 
             #[test]
             fn test_list_returns_error_for_non_existent_file_or_dir() {
                 let storage = $constructor;
                 let result = storage.delete("/non-existent");
-                assert_eq!(result.err().unwrap().kind(), ErrorKind::NotFound);
+                assert_eq!(result.err().unwrap().io_error().kind(), ErrorKind::NotFound);
             }
 
             #[test]
@@ -135,7 +135,7 @@ macro_rules! test_storage {
                 write_file_to_storage(&storage, "/file.txt", "file-content").unwrap();
                 storage.delete("/file.txt").unwrap();
                 assert_eq!(
-                    storage.get("/file.txt").err().unwrap().kind(),
+                    storage.get("/file.txt").err().unwrap().io_error().kind(),
                     ErrorKind::NotFound
                 );
                 assert_eq!(storage.list("/").unwrap().count(), 0);
@@ -155,7 +155,7 @@ macro_rules! test_storage {
                 let storage = $constructor;
                 write_file_to_storage(&storage, "/dir/file.txt", "file-content").unwrap();
                 assert_eq!(
-                    storage.delete("/dir").err().unwrap().kind(),
+                    storage.delete("/dir").err().unwrap().io_error().kind(),
                     ErrorKind::DirectoryNotEmpty
                 );
             }
@@ -195,14 +195,21 @@ macro_rules! test_storage {
     };
 }
 
-pub fn write_file_to_storage(storage: &impl Storage, path: &str, content: &str) -> io::Result<()> {
+pub fn write_file_to_storage(
+    storage: &impl Storage,
+    path: &str,
+    content: &str,
+) -> IoPathResult<()> {
     let mut writer = storage.put(path)?;
-    writer.write_all(content.as_bytes())
+    writer.write_all(content.as_bytes()).no_path()
 }
 
-pub fn read_file_from_storage_to_string(storage: &impl Storage, path: &str) -> io::Result<String> {
+pub fn read_file_from_storage_to_string(
+    storage: &impl Storage,
+    path: &str,
+) -> IoPathResult<String> {
     let mut handle = storage.get(path)?;
     let mut buf = String::new();
-    handle.reader.read_to_string(&mut buf)?;
+    handle.reader.read_to_string(&mut buf).with_path(path)?;
     Ok(buf)
 }
