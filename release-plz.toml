@@ -12,3 +12,10 @@ changelog_include = ["btdt"]
 changelog_path = "CHANGELOG.md"
 git_release_name = "v{{ version }}"
 version_group = "btdt"
+
+[[package]]
+name = "btdt-server"
+changelog_include = ["btdt"]
+changelog_path = "CHANGELOG.md"
+git_release_name = "v{{ version }}"
+version_group = "btdt"
