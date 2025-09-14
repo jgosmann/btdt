@@ -95,9 +95,12 @@ impl<E: Endpoint> Endpoint for ErrorLogMiddlewareImpl<E> {
         let original_uri = req.original_uri().clone();
         match self.ep.call(req).await {
             Ok(response) => Ok(response),
-            Err(err) => {
+            Err(mut err) => {
                 let source = err.source().unwrap_or(&err);
                 eprintln!("Error in request for {method} {original_uri}: {source:?}");
+                if err.status().is_server_error() {
+                    err.set_error_message("Internal Server Error");
+                }
                 Err(err)
             }
         }
