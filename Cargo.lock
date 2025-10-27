@@ -222,6 +222,7 @@ dependencies = [
  "rkyv",
  "tar",
  "tempfile",
+ "url",
 ]
 
 [[package]]

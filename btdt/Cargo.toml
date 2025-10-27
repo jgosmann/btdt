@@ -18,6 +18,7 @@ data-encoding-macro = "0.1.16"
 rand = { version = "0.9.0", features = ["std_rng"] }
 rkyv = "0.8.10"
 tar = "0.4.43"
+url = "2.5.7"
 fs2 = "0.4.3"
 
 [dev-dependencies]
