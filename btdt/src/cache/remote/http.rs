@@ -15,15 +15,15 @@ enum TransferEncodingType {
 }
 
 trait State {}
-struct AwaitingRequestHeaders<T: OptionTransferEncoding> {
+pub struct AwaitingRequestHeaders<T: OptionTransferEncoding> {
     _transfer_encoding: PhantomData<T>,
 }
-struct AwaitingRequestBody<T: TransferEncoding> {
+pub struct AwaitingRequestBody<T: TransferEncoding> {
     _transfer_encoding: PhantomData<T>,
 }
-struct ReadResponseStatus;
-struct ReadResponseHeaders;
-struct ReadResponseBody;
+pub struct ReadResponseStatus;
+pub struct ReadResponseHeaders;
+pub struct ReadResponseBody;
 impl<T: OptionTransferEncoding> State for AwaitingRequestHeaders<T> {}
 impl<T: TransferEncoding> State for AwaitingRequestBody<T> {}
 impl State for ReadResponseStatus {}
@@ -31,16 +31,16 @@ impl State for ReadResponseHeaders {}
 impl State for ReadResponseBody {}
 
 trait TransferEncoding {}
-struct NoBodyTransferEncoding;
-struct ChunkedTransferEncoding;
-struct FixedSizeTransferEncoding;
+pub struct NoBodyTransferEncoding;
+pub struct ChunkedTransferEncoding;
+pub struct FixedSizeTransferEncoding;
 impl TransferEncoding for NoBodyTransferEncoding {}
 impl TransferEncoding for ChunkedTransferEncoding {}
 impl TransferEncoding for FixedSizeTransferEncoding {}
 
 trait OptionTransferEncoding {}
-struct TNone;
-struct TSome<T> {
+pub struct TNone;
+pub struct TSome<T> {
     _type: PhantomData<T>,
 }
 impl OptionTransferEncoding for TNone {}
@@ -129,6 +129,19 @@ impl std::error::Error for HttpClientError {}
 impl From<io::Error> for HttpClientError {
     fn from(err: io::Error) -> Self {
         HttpClientError::IoError(err)
+    }
+}
+
+impl Into<io::Error> for HttpClientError {
+    fn into(self) -> io::Error {
+        match self {
+            HttpClientError::InvalidScheme(_) => io::Error::new(io::ErrorKind::InvalidInput, self),
+            HttpClientError::MissingHost => io::Error::new(io::ErrorKind::InvalidInput, self),
+            HttpClientError::UnsupportedFeature(_) => {
+                io::Error::new(io::ErrorKind::Unsupported, self)
+            }
+            HttpClientError::IoError(err) => err,
+        }
     }
 }
 
@@ -290,7 +303,7 @@ impl HttpResponse<ReadResponseStatus> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct Header {
+pub struct Header {
     header_line: String,
     key_end: usize,
     value_start: usize,
@@ -437,25 +450,32 @@ impl<R: Read> Read for HttpResponse<ReadResponseBody, R> {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use std::net::{SocketAddr, TcpListener};
     use std::thread;
     use std::thread::JoinHandle;
 
-    const EMPTY_RESPONSE: &str = "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n";
+    pub const EMPTY_RESPONSE: &str = "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n";
 
-    struct TestServer {
+    pub struct TestServer {
         join_handle: JoinHandle<io::Result<String>>,
         addr: SocketAddr,
+        base_url: Url,
     }
 
     impl TestServer {
         pub fn start(response: String) -> io::Result<Self> {
             let listener = TcpListener::bind("127.0.0.1:0")?;
             let addr = listener.local_addr()?;
+            let base_url =
+                Url::parse(&format!("http://{}:{}", addr.ip().to_string(), addr.port())).unwrap();
             let join_handle = thread::spawn(move || Self::serve_once(listener, &response));
-            Ok(Self { join_handle, addr })
+            Ok(Self {
+                join_handle,
+                addr,
+                base_url,
+            })
         }
 
         fn serve_once(listener: TcpListener, response: &str) -> io::Result<String> {
@@ -498,6 +518,10 @@ mod tests {
 
         pub fn addr(&self) -> SocketAddr {
             self.addr
+        }
+
+        pub fn base_url(&self) -> &Url {
+            &self.base_url
         }
     }
 
@@ -545,12 +569,9 @@ mod tests {
     fn test_post_with_fixed_size_body() -> Result<()> {
         let test_server = TestServer::start(EMPTY_RESPONSE.into())?;
         let addr = test_server.addr();
-        let url = Url::parse(&format!(
-            "http://{}:{}/path?query=foo#fragment",
-            addr.ip().to_string(),
-            addr.port()
-        ))
-        .unwrap();
+        let mut url = test_server.base_url().join("path").unwrap();
+        url.query_pairs_mut().append_pair("query", "foo");
+        url.set_fragment(Some("fragment"));
         let body = "{\"hello\": \"world\"}\r\n";
         let mut request = HttpRequest::post(&url)?.body_with_size(body.len())?;
         request.write_all(body.as_bytes())?;
@@ -599,12 +620,9 @@ mod tests {
                 .into(),
         )?;
         let addr = test_server.addr();
-        let url = Url::parse(&format!(
-            "http://{}:{}/path?query=foo#fragment",
-            addr.ip().to_string(),
-            addr.port()
-        ))
-        .unwrap();
+        let mut url = test_server.base_url().join("path").unwrap();
+        url.query_pairs_mut().append_pair("query", "foo");
+        url.set_fragment(Some("fragment"));
         let response = HttpRequest::get(&url)?.no_body()?;
 
         let (status, response) = response.read_status()?;
@@ -628,12 +646,9 @@ mod tests {
                 .into(),
         )?;
         let addr = test_server.addr();
-        let url = Url::parse(&format!(
-            "http://{}:{}/path?query=foo#fragment",
-            addr.ip().to_string(),
-            addr.port()
-        ))
-        .unwrap();
+        let mut url = test_server.base_url().join("path").unwrap();
+        url.query_pairs_mut().append_pair("query", "foo");
+        url.set_fragment(Some("fragment"));
         let response = HttpRequest::get(&url)?.no_body()?;
 
         let (status, response) = response.read_status()?;
