@@ -135,7 +135,7 @@ impl Cache for RemoteCache {
                     )
                 })
                 .with_path(url.as_str())?,
-            size_hint: size_hint.unwrap_or(0),
+            size_hint,
             reader,
         }))
     }
@@ -197,7 +197,7 @@ mod tests {
             mut reader,
         } = cache.get(&["non-existent", "existent"])?.unwrap();
         assert_eq!(key, "existent");
-        assert_eq!(size_hint, 8);
+        assert_eq!(size_hint, Some(8));
 
         let mut buf = String::new();
         reader.read_to_string(&mut buf)?;

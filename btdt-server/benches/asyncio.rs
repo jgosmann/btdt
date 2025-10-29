@@ -38,8 +38,10 @@ pub fn bench_stream_adapter(c: &mut Criterion) {
         group.throughput(criterion::Throughput::Bytes(size as u64));
         group.bench_function(format!("Read {} KiB bytes", size_kB), |b| {
             b.to_async(&harness.runtime).iter(async || {
-                let mut stream_adapter =
-                    StreamAdapter::new(Box::new(File::open(&input_path).unwrap()), size as u64);
+                let mut stream_adapter = StreamAdapter::new(
+                    Box::new(File::open(&input_path).unwrap()),
+                    Some(size as u64),
+                );
                 while let Some(chunk) = stream_adapter.next().await {
                     black_box(chunk.unwrap());
                 }
