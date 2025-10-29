@@ -124,7 +124,7 @@ impl<S: Storage, C: Clock, R: RngBytes> Cache for LocalCache<S, C, R> {
                             return Ok(Some(CacheHit {
                                 key,
                                 reader: file_handle.reader,
-                                size_hint: file_handle.size_hint,
+                                size_hint: Some(file_handle.size_hint),
                             }));
                         }
                         Err(err) => match err.io_error().kind() {
@@ -541,7 +541,7 @@ mod tests {
             .read_to_string(&mut buf)
             .expect("failed to read cache entry");
         assert_eq!(buf, content, "cache entry content mismatch");
-        assert_eq!(size_hint, content.len() as u64);
+        assert_eq!(size_hint, Some(content.len() as u64));
     }
 
     fn assert_no_cache_entry<C: Cache>(cache: &C, keys: &[&str]) {

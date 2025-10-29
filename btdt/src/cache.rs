@@ -49,5 +49,5 @@ pub struct CacheHit<'a, Reader: Read> {
     pub reader: Reader,
 
     /// (Approximate) size of the cached data in bytes.
-    pub size_hint: u64, // FIXME: should this be Option<u64>?
+    pub size_hint: Option<u64>,
 }
