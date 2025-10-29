@@ -14,6 +14,7 @@ enum TransferEncodingType {
     FixedSize(usize),
 }
 
+trait State {}
 struct AwaitingRequestHeaders<T: OptionTransferEncoding> {
     _transfer_encoding: PhantomData<T>,
 }
@@ -23,31 +24,27 @@ struct AwaitingRequestBody<T: TransferEncoding> {
 struct ReadResponseStatus;
 struct ReadResponseHeaders;
 struct ReadResponseBody;
-
-trait State {}
 impl<T: OptionTransferEncoding> State for AwaitingRequestHeaders<T> {}
 impl<T: TransferEncoding> State for AwaitingRequestBody<T> {}
 impl State for ReadResponseStatus {}
 impl State for ReadResponseHeaders {}
 impl State for ReadResponseBody {}
 
+trait TransferEncoding {}
+struct NoBodyTransferEncoding;
+struct ChunkedTransferEncoding;
+struct FixedSizeTransferEncoding;
+impl TransferEncoding for NoBodyTransferEncoding {}
+impl TransferEncoding for ChunkedTransferEncoding {}
+impl TransferEncoding for FixedSizeTransferEncoding {}
+
+trait OptionTransferEncoding {}
 struct TNone;
 struct TSome<T> {
     _type: PhantomData<T>,
 }
-
-trait OptionTransferEncoding {}
 impl OptionTransferEncoding for TNone {}
 impl<T: TransferEncoding> OptionTransferEncoding for TSome<T> {}
-
-struct NoBodyTransferEncoding;
-struct ChunkedTransferEncoding;
-struct FixedSizeTransferEncoding;
-
-trait TransferEncoding {}
-impl TransferEncoding for NoBodyTransferEncoding {}
-impl TransferEncoding for ChunkedTransferEncoding {}
-impl TransferEncoding for FixedSizeTransferEncoding {}
 
 pub struct HttpRequest<S: State> {
     stream: BufWriter<TcpStream>,
