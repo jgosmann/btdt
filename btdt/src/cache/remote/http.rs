@@ -247,6 +247,15 @@ impl HttpRequest<AwaitingRequestHeaders<TNone>> {
             _state: PhantomData,
         })
     }
+
+    pub fn body(mut self) -> Result<HttpRequest<AwaitingRequestBody<ChunkedTransferEncoding>>> {
+        self.header("Transfer-Encoding", "chunked")?;
+        self.stream.write_all(CRLF)?;
+        Ok(HttpRequest {
+            stream: self.stream,
+            _state: PhantomData,
+        })
+    }
 }
 
 impl Write for HttpRequest<AwaitingRequestBody<FixedSizeTransferEncoding>> {
@@ -259,8 +268,46 @@ impl Write for HttpRequest<AwaitingRequestBody<FixedSizeTransferEncoding>> {
     }
 }
 
-impl<T: TransferEncoding> HttpRequest<AwaitingRequestBody<T>> {
+impl Write for HttpRequest<AwaitingRequestBody<ChunkedTransferEncoding>> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let chunk_size = buf.len();
+        if chunk_size > 0 {
+            self.stream
+                .write_all(format!("{:X}", chunk_size).as_bytes())?;
+            self.stream.write_all(CRLF)?;
+            self.stream.write_all(buf)?;
+            self.stream.write_all(CRLF)?;
+        }
+        Ok(chunk_size)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.stream.flush()
+    }
+}
+
+impl HttpRequest<AwaitingRequestBody<FixedSizeTransferEncoding>> {
     pub fn response(self) -> Result<HttpResponse<ReadResponseStatus>> {
+        Ok(HttpResponse {
+            stream: BufReader::new(
+                self.stream
+                    .into_inner()
+                    .map_err(IntoInnerError::into_error)?,
+            ),
+            transfer_encoding: None,
+            headers_exhausted: false,
+            is_eof: false,
+            chunk_bytes_remaining: 0,
+            _state: PhantomData,
+        })
+    }
+}
+
+impl HttpRequest<AwaitingRequestBody<ChunkedTransferEncoding>> {
+    pub fn response(mut self) -> Result<HttpResponse<ReadResponseStatus>> {
+        self.stream.write_all(b"0")?;
+        self.stream.write_all(CRLF)?;
+        self.stream.write_all(CRLF)?;
         Ok(HttpResponse {
             stream: BufReader::new(
                 self.stream
@@ -589,6 +636,50 @@ pub mod tests {
                 addr.ip(),
                 env!("CARGO_PKG_VERSION"),
                 body.len(),
+                body
+            )
+        );
+
+        let (status, mut response) = response.read_status()?;
+        assert_eq!(
+            status,
+            HttpStatus::new("HTTP/1.1 204 No Content".to_string())?
+        );
+        assert_eq!(
+            response.read_next_header()?,
+            Some(Header::new("Content-Length: 0\r\n".to_string())?)
+        );
+        assert_eq!(response.read_next_header()?, None);
+        let mut buf = String::new();
+        response.read_body().unwrap().read_to_string(&mut buf)?;
+        assert!(buf.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn test_post_with_chunked_body() -> Result<()> {
+        let test_server = TestServer::start(EMPTY_RESPONSE.into())?;
+        let addr = test_server.addr();
+        let mut url = test_server.base_url().join("path").unwrap();
+        url.query_pairs_mut().append_pair("query", "foo");
+        url.set_fragment(Some("fragment"));
+        let body = "{\"hello\": \"world\"}\r\n";
+        let mut request = HttpRequest::post(&url)?.body()?;
+        request.write_all(&body.as_bytes()[..5])?;
+        request.write_all(&body.as_bytes()[5..])?;
+        let response = request.response()?;
+
+        assert_eq!(
+            test_server.request()?,
+            format!(
+                "POST /path?query=foo HTTP/1.1\r\n\
+                Host: {}\r\n\
+                Connection: close\r\n\
+                User-Agent: btdt/{}\r\n\
+                Transfer-Encoding: chunked\r\n\r\n\
+                {}",
+                addr.ip(),
+                env!("CARGO_PKG_VERSION"),
                 body
             )
         );
