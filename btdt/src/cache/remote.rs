@@ -1,14 +1,16 @@
 mod http;
 
-use crate::cache::remote::http::{HttpClientError, HttpRequest, HttpResponse, ReadResponseBody};
+use crate::cache::remote::http::{
+    AwaitingRequestBody, ChunkedTransferEncoding, HttpClientError, HttpRequest, HttpResponse,
+    ReadResponseBody,
+};
 use crate::cache::{Cache, CacheHit};
 use crate::error::{IoPathError, IoPathResult, WithPath};
 use crate::util::close::Close;
-use std::borrow::Cow;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io;
-use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
+use std::io::{BufRead, ErrorKind, Read, Write};
 use url::Url;
 
 pub struct RemoteCache {
@@ -57,21 +59,34 @@ impl Error for RemoteCacheError {
     }
 }
 
-pub struct RemoteWriter;
+pub struct RemoteWriter(HttpRequest<AwaitingRequestBody<ChunkedTransferEncoding>>);
 
 impl Write for RemoteWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        todo!()
+        self.0.write(buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        todo!()
+        self.0.flush()
     }
 }
 
 impl Close for RemoteWriter {
     fn close(self) -> io::Result<()> {
-        todo!()
+        let (status, _) = self
+            .0
+            .response()
+            .map_err(Into::<io::Error>::into)?
+            .read_status()
+            .map_err(Into::<io::Error>::into)?;
+
+        if !status.is_success() {
+            return Err(io::Error::other(RemoteCacheError::HttpError {
+                status: status.code_u16(),
+            }));
+        }
+
+        Ok(())
     }
 }
 
@@ -141,7 +156,16 @@ impl Cache for RemoteCache {
     }
 
     fn set(&self, keys: &[&str]) -> IoPathResult<Self::Writer> {
-        todo!()
+        let mut url = self.base_url.clone();
+        for key in keys {
+            url.query_pairs_mut().append_pair("key", key);
+        }
+
+        let try_request = || HttpRequest::post(&url)?.body();
+        let request = try_request()
+            .map_err(HttpClientError::into)
+            .with_path(url.as_str())?;
+        Ok(RemoteWriter(request))
     }
 }
 
@@ -235,6 +259,35 @@ mod tests {
                 .unwrap(),
             Box::new(RemoteCacheError::HttpError { status: 404 }),
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_set_sends_data_to_remote_cache() -> io::Result<()> {
+        let test_server = TestServer::start(EMPTY_RESPONSE.into()).unwrap();
+        let addr = test_server.addr();
+        let cache = RemoteCache::new(test_server.base_url(), "cache-id").unwrap();
+        let mut writer = cache.set(&["key1", "key2"])?;
+
+        writer.write_all(b"Test data")?;
+        writer.close()?;
+
+        assert_eq!(
+            test_server.request()?,
+            format!(
+                "\
+                POST /api/caches/cache-id?key=key1&key=key2 HTTP/1.1\r\n\
+                Host: {}\r\n\
+                Connection: close\r\n\
+                User-Agent: btdt/{}\r\n\
+                Transfer-Encoding: chunked\r\n\
+                \r\n\
+                Test data",
+                addr.ip(),
+                env!("CARGO_PKG_VERSION")
+            )
+        );
+
         Ok(())
     }
 }

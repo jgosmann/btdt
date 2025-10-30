@@ -14,7 +14,7 @@ enum TransferEncodingType {
     FixedSize(usize),
 }
 
-trait State {}
+pub trait State {}
 pub struct AwaitingRequestHeaders<T: OptionTransferEncoding> {
     _transfer_encoding: PhantomData<T>,
 }
@@ -30,7 +30,7 @@ impl State for ReadResponseStatus {}
 impl State for ReadResponseHeaders {}
 impl State for ReadResponseBody {}
 
-trait TransferEncoding {}
+pub trait TransferEncoding {}
 pub struct NoBodyTransferEncoding;
 pub struct ChunkedTransferEncoding;
 pub struct FixedSizeTransferEncoding;
