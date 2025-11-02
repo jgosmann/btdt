@@ -120,7 +120,7 @@ impl HttpClient {
         self.method("PUT", url)
     }
 
-    fn connect(&self, url: &Url) -> Result<MaybeTlsWriter> {
+    fn connect(&self, url: &Url) -> Result<Box<dyn WriteThenRead>> {
         let use_tls = match url.scheme() {
             "http" => false,
             "https" => true,
@@ -140,44 +140,34 @@ impl HttpClient {
                 ServerName::try_from(host.to_string())?,
             )?;
             let tls_stream = StreamOwned::new(connection, stream);
-            Ok(MaybeTlsWriter::Tls(Box::new(BufWriter::new(tls_stream))))
+            Ok(Box::new(BufWriter::new(tls_stream)))
         } else {
-            Ok(MaybeTlsWriter::Plain(BufWriter::new(stream)))
+            Ok(Box::new(BufWriter::new(stream)))
         }
     }
 }
 
-enum MaybeTlsWriter {
-    Plain(BufWriter<TcpStream>),
-    Tls(Box<BufWriter<StreamOwned<ClientConnection, TcpStream>>>),
+trait WriteThenRead: Write {
+    fn into_reader(
+        self: Box<Self>,
+    ) -> io::Result<HttpMessageReader<Box<dyn BufRead>, ReadResponseStatus>>;
 }
 
-impl Write for MaybeTlsWriter {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        match self {
-            Self::Plain(stream) => stream.write(buf),
-            MaybeTlsWriter::Tls(stream) => stream.write(buf),
-        }
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        match self {
-            Self::Plain(stream) => stream.flush(),
-            MaybeTlsWriter::Tls(stream) => stream.flush(),
-        }
+impl WriteThenRead for BufWriter<TcpStream> {
+    fn into_reader(
+        self: Box<Self>,
+    ) -> io::Result<HttpMessageReader<Box<dyn BufRead>, ReadResponseStatus>> {
+        Ok(HttpMessageReader::new(Box::new(BufReader::new(
+            self.into_inner()?,
+        ))))
     }
 }
 
-impl MaybeTlsWriter {
-    fn into_reader(self) -> io::Result<HttpMessageReader<Box<dyn BufRead>, ReadResponseStatus>> {
-        match self {
-            Self::Plain(stream) => Ok(HttpMessageReader::new(Box::new(BufReader::new(
-                stream.into_inner()?,
-            )))),
-            MaybeTlsWriter::Tls(stream) => {
-                Ok(HttpMessageReader::new(Box::new(stream.into_inner()?)))
-            }
-        }
+impl WriteThenRead for BufWriter<StreamOwned<ClientConnection, TcpStream>> {
+    fn into_reader(
+        self: Box<Self>,
+    ) -> io::Result<HttpMessageReader<Box<dyn BufRead>, ReadResponseStatus>> {
+        Ok(HttpMessageReader::new(Box::new(self.into_inner()?)))
     }
 }
 
@@ -225,7 +215,7 @@ impl HttpStatus {
 }
 
 pub struct HttpRequest<S: State> {
-    stream: MaybeTlsWriter,
+    stream: Box<dyn WriteThenRead>,
     _state: PhantomData<S>,
 }
 
