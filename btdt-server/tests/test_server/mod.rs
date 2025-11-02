@@ -7,8 +7,8 @@ use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
 #[allow(unused)]
-pub static CERTIFICATE_PKCS12: &[u8] = include_bytes!("../tls/leaf.p12");
-pub static CERTIFICATE_PEM: &[u8] = include_bytes!("../tls/ca.pem");
+pub static CERTIFICATE_PKCS12: &[u8] = include_bytes!("../../../tls/leaf.p12");
+pub static CERTIFICATE_PEM: &[u8] = include_bytes!("../../../tls/ca.pem");
 
 pub struct BtdtTestServer {
     process: Child,
