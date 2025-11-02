@@ -5,12 +5,14 @@ use std::fmt::{Display, Formatter};
 use std::fs;
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
+use tempfile::NamedTempFile;
 
 #[allow(unused)]
 pub static CERTIFICATE_PKCS12: &[u8] = include_bytes!("../../../tls/leaf.p12");
 pub static CERTIFICATE_PEM: &[u8] = include_bytes!("../../../tls/ca.pem");
 
 pub struct BtdtTestServer {
+    config_file: NamedTempFile,
     process: Child,
     client: Client,
     base_url: Url,
@@ -44,6 +46,7 @@ impl BtdtTestServer {
         let process = command.spawn().expect("failed to start btdt-server");
         let tls_enabled = env.contains_key("BTDT_TLS_KEYSTORE");
         Self {
+            config_file,
             process,
             client: Client::builder()
                 .add_root_certificate(Certificate::from_pem(CERTIFICATE_PEM).unwrap())
