@@ -252,7 +252,7 @@ dependencies = [
 
 [[package]]
 name = "btdt"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "blake3",
  "chrono",
@@ -272,7 +272,7 @@ dependencies = [
 
 [[package]]
 name = "btdt-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "blake3",
@@ -287,7 +287,7 @@ dependencies = [
 
 [[package]]
 name = "btdt-server"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "btdt",
  "bytes 1.10.1",
