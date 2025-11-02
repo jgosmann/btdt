@@ -21,12 +21,12 @@ impl HttpClientError {
 impl Display for HttpClientError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidScheme(scheme) => write!(f, "unknown URL scheme: {}", scheme),
-            Self::InvalidDnsName(hostname) => write!(f, "invalid DNS name: {}", hostname),
+            Self::InvalidScheme(scheme) => write!(f, "unknown URL scheme: {scheme}"),
+            Self::InvalidDnsName(hostname) => write!(f, "invalid DNS name: {hostname}"),
             Self::MissingHost => write!(f, "missing host"),
-            Self::UnsupportedFeature(feature) => write!(f, "unsupported feature: {}", feature),
-            Self::IoError(err) => write!(f, "I/O error: {}", err),
-            Self::TlsError(err) => write!(f, "TLS error: {}", err),
+            Self::UnsupportedFeature(feature) => write!(f, "unsupported feature: {feature}"),
+            Self::IoError(err) => write!(f, "I/O error: {err}"),
+            Self::TlsError(err) => write!(f, "TLS error: {err}"),
         }
     }
 }
@@ -39,17 +39,19 @@ impl From<io::Error> for HttpClientError {
     }
 }
 
-impl Into<io::Error> for HttpClientError {
-    fn into(self) -> io::Error {
-        match self {
-            HttpClientError::InvalidScheme(_) => io::Error::new(io::ErrorKind::InvalidInput, self),
-            HttpClientError::MissingHost => io::Error::new(io::ErrorKind::InvalidInput, self),
+impl From<HttpClientError> for io::Error {
+    fn from(value: HttpClientError) -> Self {
+        match value {
+            HttpClientError::InvalidScheme(_) => io::Error::new(io::ErrorKind::InvalidInput, value),
+            HttpClientError::MissingHost => io::Error::new(io::ErrorKind::InvalidInput, value),
             HttpClientError::UnsupportedFeature(_) => {
-                io::Error::new(io::ErrorKind::Unsupported, self)
+                io::Error::new(io::ErrorKind::Unsupported, value)
             }
             HttpClientError::IoError(err) => err,
-            HttpClientError::InvalidDnsName(_) => io::Error::new(io::ErrorKind::InvalidInput, self),
-            HttpClientError::TlsError(_) => io::Error::new(io::ErrorKind::Other, self),
+            HttpClientError::InvalidDnsName(_) => {
+                io::Error::new(io::ErrorKind::InvalidInput, value)
+            }
+            HttpClientError::TlsError(_) => io::Error::other(value),
         }
     }
 }

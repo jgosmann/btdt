@@ -12,12 +12,11 @@ use error::HttpClientError;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io;
-use std::io::{BufRead, ErrorKind, Read, Write};
+use std::io::{ErrorKind, Write};
 use url::Url;
 
 pub struct RemoteCache {
     base_url: Url,
-    cache_id: String,
     client: HttpClient,
 }
 
@@ -29,7 +28,6 @@ impl RemoteCache {
                 .expect("failed to join API path")
                 .join(cache_id)
                 .map_err(|err| RemoteCacheError::InvalidCacheId(cache_id.to_string(), err))?,
-            cache_id: cache_id.into(),
             client: HttpClient::default()?,
         })
     }
@@ -46,7 +44,7 @@ pub enum RemoteCacheError {
 impl Display for RemoteCacheError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidCacheId(cache_id, _) => write!(f, "Invalid cache id: {}", cache_id),
+            Self::InvalidCacheId(cache_id, _) => write!(f, "Invalid cache id: {cache_id}"),
             Self::HttpError { status } => write!(f, "http error: {status}"),
             RemoteCacheError::TlsError { source } => write!(f, "tls error: {source}"),
         }
@@ -105,7 +103,7 @@ impl Cache for RemoteCache {
     type Writer = RemoteWriter;
 
     fn get<'a>(&self, keys: &[&'a str]) -> IoPathResult<Option<CacheHit<'a, Self::Reader>>> {
-        if keys.len() < 1 {
+        if keys.is_empty() {
             return Ok(None);
         }
         let mut url = self.base_url.clone();
@@ -184,6 +182,7 @@ mod tests {
     use super::http::tests::{EMPTY_RESPONSE, TestServer};
     use super::*;
     use std::io;
+    use std::io::Read;
 
     #[test]
     fn test_get_returns_none_for_empty_keys() {

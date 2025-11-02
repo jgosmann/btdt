@@ -1,13 +1,11 @@
 use crate::cache::remote::error::HttpClientError;
-use rustls::pki_types::{CertificateDer, ServerName};
-use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned, crypto};
-use rustls_platform_verifier::{BuilderVerifierExt, ConfigVerifierExt};
-use std::fmt::Display;
+use rustls::pki_types::ServerName;
+use rustls::{ClientConfig, ClientConnection, StreamOwned, crypto};
+use rustls_platform_verifier::BuilderVerifierExt;
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::marker::PhantomData;
 use std::net::TcpStream;
-use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use url::Url;
 
@@ -44,7 +42,7 @@ impl TransferEncoding for NoBodyTransferEncoding {}
 impl TransferEncoding for ChunkedTransferEncoding {}
 impl TransferEncoding for FixedSizeTransferEncoding {}
 
-trait OptionTransferEncoding {}
+pub trait OptionTransferEncoding {}
 pub struct TNone;
 pub struct TSome<T> {
     _type: PhantomData<T>,
@@ -64,16 +62,12 @@ impl HttpClient {
     }
 
     pub fn default() -> std::result::Result<Self, rustls::Error> {
-        Ok(Self {
-            tls_client_config: Arc::new(
-                ClientConfig::builder_with_provider(
-                    Arc::new(crypto::aws_lc_rs::default_provider()),
-                )
+        Ok(Self::new(Arc::new(
+            ClientConfig::builder_with_provider(Arc::new(crypto::aws_lc_rs::default_provider()))
                 .with_safe_default_protocol_versions()?
                 .with_platform_verifier()
                 .with_no_client_auth(),
-            ),
-        })
+        )))
     }
 
     pub fn method(
@@ -116,6 +110,7 @@ impl HttpClient {
         })
     }
 
+    #[allow(unused)]
     pub fn post(&self, url: &Url) -> Result<HttpRequest<AwaitingRequestHeaders<TNone>>> {
         self.method("POST", url)
     }
@@ -144,7 +139,7 @@ impl HttpClient {
                 ServerName::try_from(host.to_string())?,
             )?;
             let tls_stream = StreamOwned::new(connection, stream);
-            Ok(MaybeTlsWriter::Tls(BufWriter::new(tls_stream)))
+            Ok(MaybeTlsWriter::Tls(Box::new(BufWriter::new(tls_stream))))
         } else {
             Ok(MaybeTlsWriter::Plain(BufWriter::new(stream)))
         }
@@ -153,7 +148,7 @@ impl HttpClient {
 
 enum MaybeTlsWriter {
     Plain(BufWriter<TcpStream>),
-    Tls(BufWriter<StreamOwned<ClientConnection, TcpStream>>),
+    Tls(Box<BufWriter<StreamOwned<ClientConnection, TcpStream>>>),
 }
 
 impl Write for MaybeTlsWriter {
@@ -251,6 +246,7 @@ impl<T: OptionTransferEncoding> HttpRequest<AwaitingRequestHeaders<T>> {
 }
 
 impl HttpRequest<AwaitingRequestHeaders<TNone>> {
+    #[allow(unused)]
     pub fn body_with_size(
         mut self,
         size: usize,
@@ -288,7 +284,7 @@ impl Write for HttpRequest<AwaitingRequestBody<ChunkedTransferEncoding>> {
         let chunk_size = buf.len();
         if chunk_size > 0 {
             self.stream
-                .write_all(format!("{:X}", chunk_size).as_bytes())?;
+                .write_all(format!("{chunk_size:X}").as_bytes())?;
             self.stream.write_all(CRLF)?;
             self.stream.write_all(buf)?;
             self.stream.write_all(CRLF)?;
@@ -302,6 +298,7 @@ impl Write for HttpRequest<AwaitingRequestBody<ChunkedTransferEncoding>> {
 }
 
 impl HttpRequest<AwaitingRequestBody<FixedSizeTransferEncoding>> {
+    #[allow(unused)]
     pub fn response(self) -> Result<HttpResponse<ReadResponseStatus>> {
         Ok(HttpResponse {
             inner: self.stream.into_reader()?,
@@ -516,7 +513,7 @@ pub struct HttpResponse<S: State> {
 }
 
 impl HttpResponse<ReadResponseStatus> {
-    pub fn read_status(mut self) -> Result<(HttpStatus, HttpResponse<ReadResponseHeaders>)> {
+    pub fn read_status(self) -> Result<(HttpStatus, HttpResponse<ReadResponseHeaders>)> {
         let (status, inner) = self.inner.read_status()?;
         Ok((status, HttpResponse { inner }))
     }
@@ -527,7 +524,7 @@ impl HttpResponse<ReadResponseHeaders> {
         self.inner.read_next_header()
     }
 
-    pub fn read_body(mut self) -> Result<HttpResponse<ReadResponseBody>> {
+    pub fn read_body(self) -> Result<HttpResponse<ReadResponseBody>> {
         Ok(HttpResponse {
             inner: self.inner.read_body()?,
         })
@@ -545,7 +542,7 @@ pub mod tests {
     use super::*;
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-    use rustls::{ServerConfig, ServerConnection, StreamOwned, crypto};
+    use rustls::{RootCertStore, ServerConfig, ServerConnection, StreamOwned, crypto};
     use std::net::{SocketAddr, TcpListener};
     use std::sync::Arc;
     use std::thread;
@@ -799,7 +796,6 @@ pub mod tests {
             Hello!\r\n"
                 .into(),
         )?;
-        let addr = test_server.addr();
         let mut url = test_server.base_url().join("path").unwrap();
         url.query_pairs_mut().append_pair("query", "foo");
         url.set_fragment(Some("fragment"));
@@ -825,7 +821,6 @@ pub mod tests {
             0\r\n\r\n"
                 .into(),
         )?;
-        let addr = test_server.addr();
         let mut url = test_server.base_url().join("path").unwrap();
         url.query_pairs_mut().append_pair("query", "foo");
         url.set_fragment(Some("fragment"));
@@ -844,11 +839,10 @@ pub mod tests {
         let root_cert =
             CertificateDer::from_pem_slice(include_bytes!("../../../../tls/ca.pem")).unwrap();
         let mut cert_store = RootCertStore::empty();
-        cert_store.add(root_cert).unwrap();
+        cert_store.add(root_cert)?;
         let tls_client_config = Arc::new(
             ClientConfig::builder_with_provider(Arc::new(crypto::aws_lc_rs::default_provider()))
-                .with_safe_default_protocol_versions()
-                .unwrap()
+                .with_safe_default_protocol_versions()?
                 .with_root_certificates(cert_store)
                 .with_no_client_auth(),
         );
