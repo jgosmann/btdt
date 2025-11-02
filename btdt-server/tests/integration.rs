@@ -1,5 +1,6 @@
 use crate::test_server::BtdtTestServer;
 use btdt::cache::remote::RemoteCache;
+use btdt::cache::remote::http::HttpClient;
 use btdt::pipeline::Pipeline;
 use serial_test::serial;
 use std::fs;
@@ -23,7 +24,14 @@ fn test_health_endpoint() {
 #[serial]
 fn test_roundtrip() {
     let server = BtdtTestServer::default().wait_until_ready().unwrap();
-    let mut client = Pipeline::new(RemoteCache::new(server.base_url(), "test-cache").unwrap());
+    let mut client = Pipeline::new(
+        RemoteCache::new(
+            server.base_url(),
+            "test-cache",
+            HttpClient::default().unwrap(),
+        )
+        .unwrap(),
+    );
 
     let tempdir = tempdir().unwrap();
     let source_path = tempdir.path().join("source-root");

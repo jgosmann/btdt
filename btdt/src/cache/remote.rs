@@ -1,5 +1,5 @@
 mod error;
-mod http;
+pub mod http;
 
 use crate::cache::remote::http::{
     AwaitingRequestBody, ChunkedTransferEncoding, HttpClient, HttpRequest, HttpResponse,
@@ -21,14 +21,18 @@ pub struct RemoteCache {
 }
 
 impl RemoteCache {
-    pub fn new(base_url: &Url, cache_id: &str) -> Result<Self, RemoteCacheError> {
+    pub fn new(
+        base_url: &Url,
+        cache_id: &str,
+        client: HttpClient,
+    ) -> Result<Self, RemoteCacheError> {
         Ok(RemoteCache {
             base_url: base_url
                 .join("api/caches/")
                 .expect("failed to join API path")
                 .join(cache_id)
                 .map_err(|err| RemoteCacheError::InvalidCacheId(cache_id.to_string(), err))?,
-            client: HttpClient::default()?,
+            client,
         })
     }
 }
@@ -38,7 +42,6 @@ impl RemoteCache {
 pub enum RemoteCacheError {
     InvalidCacheId(String, url::ParseError),
     HttpError { status: u16 },
-    TlsError { source: rustls::Error },
 }
 
 impl Display for RemoteCacheError {
@@ -46,7 +49,6 @@ impl Display for RemoteCacheError {
         match self {
             Self::InvalidCacheId(cache_id, _) => write!(f, "Invalid cache id: {cache_id}"),
             Self::HttpError { status } => write!(f, "http error: {status}"),
-            RemoteCacheError::TlsError { source } => write!(f, "tls error: {source}"),
         }
     }
 }
@@ -56,14 +58,7 @@ impl Error for RemoteCacheError {
         match self {
             Self::InvalidCacheId(_, err) => Some(err),
             Self::HttpError { .. } => None,
-            RemoteCacheError::TlsError { source } => Some(source),
         }
-    }
-}
-
-impl From<rustls::Error> for RemoteCacheError {
-    fn from(source: rustls::Error) -> Self {
-        Self::TlsError { source }
     }
 }
 
@@ -187,7 +182,12 @@ mod tests {
     #[test]
     fn test_get_returns_none_for_empty_keys() {
         let test_server = TestServer::start(EMPTY_RESPONSE.into()).unwrap();
-        let cache = RemoteCache::new(test_server.base_url(), "cache-id").unwrap();
+        let cache = RemoteCache::new(
+            test_server.base_url(),
+            "cache-id",
+            HttpClient::default().unwrap(),
+        )
+        .unwrap();
         assert!(cache.get(&[]).unwrap().is_none());
     }
 
@@ -195,7 +195,12 @@ mod tests {
     fn test_get_returns_non_for_cache_miss() -> io::Result<()> {
         let test_server = TestServer::start(EMPTY_RESPONSE.into()).unwrap();
         let addr = test_server.addr();
-        let cache = RemoteCache::new(test_server.base_url(), "cache-id").unwrap();
+        let cache = RemoteCache::new(
+            test_server.base_url(),
+            "cache-id",
+            HttpClient::default().unwrap(),
+        )
+        .unwrap();
         assert!(cache.get(&["non-existent"])?.is_none());
 
         assert_eq!(
@@ -223,7 +228,12 @@ mod tests {
         )
         .unwrap();
         let addr = test_server.addr();
-        let cache = RemoteCache::new(test_server.base_url(), "cache-id").unwrap();
+        let cache = RemoteCache::new(
+            test_server.base_url(),
+            "cache-id",
+            HttpClient::default().unwrap(),
+        )
+        .unwrap();
         let CacheHit {
             key,
             size_hint,
@@ -258,7 +268,12 @@ mod tests {
         let test_server =
             TestServer::start("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".into())
                 .unwrap();
-        let cache = RemoteCache::new(test_server.base_url(), "cache-id").unwrap();
+        let cache = RemoteCache::new(
+            test_server.base_url(),
+            "cache-id",
+            HttpClient::default().unwrap(),
+        )
+        .unwrap();
         let error = cache.get(&["non-existent"]).err().unwrap().into_io_error();
         match *error
             .into_inner()
@@ -278,7 +293,12 @@ mod tests {
     fn test_set_sends_data_to_remote_cache() -> io::Result<()> {
         let test_server = TestServer::start(EMPTY_RESPONSE.into()).unwrap();
         let addr = test_server.addr();
-        let cache = RemoteCache::new(test_server.base_url(), "cache-id").unwrap();
+        let cache = RemoteCache::new(
+            test_server.base_url(),
+            "cache-id",
+            HttpClient::default().unwrap(),
+        )
+        .unwrap();
         let mut writer = cache.set(&["key1", "key2"])?;
 
         writer.write_all(b"Test data")?;

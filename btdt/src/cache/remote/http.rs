@@ -61,6 +61,7 @@ impl HttpClient {
         Self { tls_client_config }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn default() -> std::result::Result<Self, rustls::Error> {
         Ok(Self::new(Arc::new(
             ClientConfig::builder_with_provider(Arc::new(crypto::aws_lc_rs::default_provider()))
