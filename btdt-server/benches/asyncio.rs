@@ -1,5 +1,5 @@
-use asyncio::StreamAdapter;
 use btdt::test_util::fs::CreateFilled;
+use btdt_server_lib::asyncio::StreamAdapter;
 use criterion::{Criterion, criterion_group, criterion_main};
 use rand_core::{RngCore, SeedableRng};
 use rand_xoshiro::Xoshiro256PlusPlus;

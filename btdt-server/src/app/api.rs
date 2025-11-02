@@ -1,7 +1,7 @@
-use crate::app::cache_dispatcher::CacheDispatcher;
 use crate::app::get_from_cache::GetFromCacheResponse;
 use crate::config::CacheConfig;
 use btdt::cache::Cache;
+use btdt::cache::cache_dispatcher::CacheDispatcher;
 use btdt::cache::local::LocalCache;
 use btdt::storage::filesystem::FilesystemStorage;
 use btdt::storage::in_memory::InMemoryStorage;

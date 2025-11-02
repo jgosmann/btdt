@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 use tempfile::NamedTempFile;
 
 #[allow(unused)]
-pub static CERTIFICATE_PKCS12: &[u8] = include_bytes!("../../../tls/leaf.p12");
-pub static CERTIFICATE_PEM: &[u8] = include_bytes!("../../../tls/ca.pem");
+pub static CERTIFICATE_PKCS12: &[u8] = include_bytes!("../../tls/leaf.p12");
+pub static CERTIFICATE_PEM: &[u8] = include_bytes!("../../tls/ca.pem");
 
 pub struct BtdtTestServer {
     _config_file: NamedTempFile,
@@ -37,7 +37,8 @@ impl BtdtTestServer {
         .unwrap();
 
         static BIND_ADDR: &str = "127.0.0.1:8707";
-        let mut command = Command::new(env!("CARGO_BIN_EXE_btdt-server"));
+        let mut command = Command::new("cargo");
+        command.args(&["run", "--package", "btdt-server", "--bin", "btdt-server"]);
         command.env("BTDT_BIND_ADDRS", BIND_ADDR);
         command.env("BTDT_SERVER_CONFIG_FILE", config_file.path());
         for (key, value) in env {

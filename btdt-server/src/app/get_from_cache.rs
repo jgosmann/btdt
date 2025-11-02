@@ -1,5 +1,5 @@
-use asyncio::StreamAdapter;
 use btdt::cache::CacheHit;
+use btdt_server_lib::asyncio::StreamAdapter;
 use poem::Body;
 use poem_openapi::ApiResponse;
 use poem_openapi::payload::Binary;

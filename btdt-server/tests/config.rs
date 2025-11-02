@@ -1,9 +1,7 @@
-use crate::test_server::BtdtTestServer;
+use btdt_server_lib::test_server::BtdtTestServer;
 use reqwest::StatusCode;
 use serial_test::serial;
 use std::collections::BTreeMap;
-
-mod test_server;
 
 #[test]
 #[serial]

@@ -7,6 +7,7 @@ use crate::util::close::Close;
 use std::io::{Read, Write};
 
 pub mod blob_id;
+pub mod cache_dispatcher;
 pub mod local;
 mod meta;
 pub mod remote;

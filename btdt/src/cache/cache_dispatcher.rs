@@ -1,15 +1,17 @@
-use btdt::cache::local::LocalCache;
-use btdt::cache::{Cache, CacheHit};
-use btdt::error::IoPathResult;
-use btdt::storage::filesystem::FilesystemStorage;
-use btdt::storage::in_memory::InMemoryStorage;
-use btdt::util::close::Close;
+use crate::cache::local::LocalCache;
+use crate::cache::remote::RemoteCache;
+use crate::cache::{Cache, CacheHit};
+use crate::error::IoPathResult;
+use crate::storage::filesystem::FilesystemStorage;
+use crate::storage::in_memory::InMemoryStorage;
+use crate::util::close::Close;
 use std::io;
 use std::io::{Read, Write};
 
 pub enum CacheDispatcher {
     InMemory(LocalCache<InMemoryStorage>),
     Filesystem(LocalCache<FilesystemStorage>),
+    Remote(RemoteCache),
 }
 
 impl Cache for CacheDispatcher {
@@ -40,6 +42,17 @@ impl Cache for CacheDispatcher {
                     size_hint,
                 },
             ),
+            CacheDispatcher::Remote(cache) => cache.get(keys)?.map(
+                |CacheHit {
+                     key,
+                     reader,
+                     size_hint,
+                 }| CacheHit {
+                    key,
+                    reader: Box::new(reader) as Box<dyn Read + Send>,
+                    size_hint,
+                },
+            ),
         })
     }
 
@@ -47,6 +60,7 @@ impl Cache for CacheDispatcher {
         match self {
             Self::InMemory(cache) => cache.set(keys).map(CacheWriter::InMemory),
             Self::Filesystem(cache) => cache.set(keys).map(CacheWriter::Filesystem),
+            CacheDispatcher::Remote(cache) => cache.set(keys).map(CacheWriter::Remote),
         }
     }
 }
@@ -54,6 +68,7 @@ impl Cache for CacheDispatcher {
 pub enum CacheWriter {
     InMemory(<LocalCache<InMemoryStorage> as Cache>::Writer),
     Filesystem(<LocalCache<FilesystemStorage> as Cache>::Writer),
+    Remote(<RemoteCache as Cache>::Writer),
 }
 
 impl Write for CacheWriter {
@@ -61,6 +76,7 @@ impl Write for CacheWriter {
         match self {
             Self::InMemory(writer) => writer.write(buf),
             Self::Filesystem(writer) => writer.write(buf),
+            CacheWriter::Remote(writer) => writer.write(buf),
         }
     }
 
@@ -68,6 +84,7 @@ impl Write for CacheWriter {
         match self {
             Self::InMemory(writer) => writer.flush(),
             Self::Filesystem(writer) => writer.flush(),
+            CacheWriter::Remote(writer) => writer.flush(),
         }
     }
 }
@@ -77,6 +94,7 @@ impl Close for CacheWriter {
         match self {
             Self::InMemory(writer) => writer.close(),
             Self::Filesystem(writer) => writer.close(),
+            CacheWriter::Remote(writer) => writer.close(),
         }
     }
 }

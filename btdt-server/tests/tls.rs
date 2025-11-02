@@ -1,10 +1,8 @@
-use crate::test_server::{BtdtTestServer, CERTIFICATE_PKCS12};
+use btdt_server_lib::test_server::{BtdtTestServer, CERTIFICATE_PKCS12};
 use serial_test::serial;
 use std::collections::BTreeMap;
 use std::io::Write;
 use tempfile::NamedTempFile;
-
-mod test_server;
 
 #[test]
 #[serial]

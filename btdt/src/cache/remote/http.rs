@@ -120,7 +120,7 @@ impl HttpClient {
         self.method("PUT", url)
     }
 
-    fn connect(&self, url: &Url) -> Result<Box<dyn WriteThenRead>> {
+    fn connect(&self, url: &Url) -> Result<Box<dyn WriteThenRead + Send>> {
         let use_tls = match url.scheme() {
             "http" => false,
             "https" => true,
@@ -150,13 +150,13 @@ impl HttpClient {
 trait WriteThenRead: Write {
     fn into_reader(
         self: Box<Self>,
-    ) -> io::Result<HttpMessageReader<Box<dyn BufRead>, ReadResponseStatus>>;
+    ) -> io::Result<HttpMessageReader<Box<dyn BufRead + Send>, ReadResponseStatus>>;
 }
 
 impl WriteThenRead for BufWriter<TcpStream> {
     fn into_reader(
         self: Box<Self>,
-    ) -> io::Result<HttpMessageReader<Box<dyn BufRead>, ReadResponseStatus>> {
+    ) -> io::Result<HttpMessageReader<Box<dyn BufRead + Send>, ReadResponseStatus>> {
         Ok(HttpMessageReader::new(Box::new(BufReader::new(
             self.into_inner()?,
         ))))
@@ -166,7 +166,7 @@ impl WriteThenRead for BufWriter<TcpStream> {
 impl WriteThenRead for BufWriter<StreamOwned<ClientConnection, TcpStream>> {
     fn into_reader(
         self: Box<Self>,
-    ) -> io::Result<HttpMessageReader<Box<dyn BufRead>, ReadResponseStatus>> {
+    ) -> io::Result<HttpMessageReader<Box<dyn BufRead + Send>, ReadResponseStatus>> {
         Ok(HttpMessageReader::new(Box::new(self.into_inner()?)))
     }
 }
@@ -215,7 +215,7 @@ impl HttpStatus {
 }
 
 pub struct HttpRequest<S: State> {
-    stream: Box<dyn WriteThenRead>,
+    stream: Box<dyn WriteThenRead + Send>,
     _state: PhantomData<S>,
 }
 
@@ -500,7 +500,7 @@ impl<R: BufRead> Read for HttpMessageReader<R, ReadResponseBody> {
 }
 
 pub struct HttpResponse<S: State> {
-    inner: HttpMessageReader<Box<dyn BufRead>, S>,
+    inner: HttpMessageReader<Box<dyn BufRead + Send>, S>,
 }
 
 impl HttpResponse<ReadResponseStatus> {

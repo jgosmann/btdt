@@ -1,5 +1,7 @@
 use crate::cache_fixture::CacheFixture;
 use btdt::test_util::fs_spec::{DirSpec, Node};
+use btdt_server_lib::test_server::BtdtTestServer;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -65,6 +67,60 @@ fn test_roundtrip() {
             .arg("restore")
             .arg("--cache")
             .arg(cache_path.to_str().unwrap())
+            .arg("--keys")
+            .arg(format!("cache-key-{}", i))
+            .arg(&destination_path)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "restore failed, stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(spec.compare_with(&destination_path).unwrap(), vec![]);
+    }
+}
+
+#[test]
+fn test_remote_roundtrip() {
+    let server = BtdtTestServer::new(&BTreeMap::new())
+        .wait_until_ready()
+        .unwrap();
+    let cache_url = server.base_url().join("test-cache").unwrap();
+
+    let tempdir = tempdir().unwrap();
+    let source_path = tempdir.path().join("source-root");
+    let destination_paths = [
+        tempdir.path().join("destination-root-0"),
+        tempdir.path().join("destination-root-1"),
+        tempdir.path().join("destination-root-2"),
+    ];
+
+    let spec = DirSpec::create_unix_fixture();
+    spec.create(source_path.as_ref()).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_btdt"))
+        .arg("store")
+        .arg("--cache")
+        .arg(cache_url.as_str())
+        .arg("--keys")
+        .arg("cache-key-0")
+        .arg("--keys")
+        .arg("cache-key-1,,cache-key-2")
+        .arg(&source_path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "store failed, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    for (i, destination_path) in destination_paths.iter().enumerate() {
+        let output = Command::new(env!("CARGO_BIN_EXE_btdt"))
+            .arg("restore")
+            .arg("--cache")
+            .arg(cache_url.as_str())
             .arg("--keys")
             .arg(format!("cache-key-{}", i))
             .arg(&destination_path)

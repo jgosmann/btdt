@@ -277,12 +277,14 @@ dependencies = [
  "anyhow",
  "blake3",
  "btdt",
+ "btdt-server",
  "chrono",
  "clap",
  "humantime",
  "rand",
  "tempfile",
  "trycmd",
+ "url",
 ]
 
 [[package]]
@@ -290,6 +292,7 @@ name = "btdt-server"
 version = "0.2.0"
 dependencies = [
  "btdt",
+ "btdt-server",
  "bytes 1.10.1",
  "chrono",
  "config",

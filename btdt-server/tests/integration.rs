@@ -1,12 +1,10 @@
-use crate::test_server::BtdtTestServer;
 use btdt::cache::remote::RemoteCache;
 use btdt::cache::remote::http::HttpClient;
 use btdt::pipeline::Pipeline;
+use btdt_server_lib::test_server::BtdtTestServer;
 use serial_test::serial;
 use std::fs;
 use tempfile::tempdir;
-
-mod test_server;
 
 #[test]
 #[serial]

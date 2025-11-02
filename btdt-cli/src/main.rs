@@ -1,7 +1,10 @@
 mod humanbytes;
 
-use anyhow::Context;
+use anyhow::{Context, anyhow};
+use btdt::cache::cache_dispatcher::CacheDispatcher;
 use btdt::cache::local::LocalCache;
+use btdt::cache::remote::RemoteCache;
+use btdt::cache::remote::http::HttpClient;
 use btdt::pipeline::Pipeline;
 use btdt::storage::filesystem::FilesystemStorage;
 use clap::{Args, Parser, Subcommand};
@@ -9,6 +12,7 @@ use std::fs::File;
 use std::io;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use url::Url;
 
 /// "been there, done that" - a tool for flexible CI caching
 ///
@@ -121,27 +125,42 @@ impl CacheEntriesRef {
             .collect()
     }
 
-    fn to_pipeline(&self) -> Result<Pipeline<LocalCache<FilesystemStorage>>, anyhow::Error> {
+    fn to_pipeline(&self) -> Result<Pipeline<CacheDispatcher>, anyhow::Error> {
         Ok(Pipeline::new(self.cache_ref.to_cache()?))
     }
 }
 
 impl CacheRef {
-    fn to_cache(&self) -> Result<LocalCache<FilesystemStorage>, anyhow::Error> {
-        let path = PathBuf::from(&self.cache)
-            .canonicalize()
-            .and_then(|path| {
-                if !path.is_dir() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::NotADirectory,
-                        "Not a directory",
-                    ));
-                }
-                Ok(path)
-            })
-            .with_context(|| format!("Could not access cache: {}", &self.cache))?;
-        let storage = FilesystemStorage::new(path);
-        Ok(LocalCache::new(storage))
+    fn to_cache(&self) -> Result<CacheDispatcher, anyhow::Error> {
+        if self.cache.starts_with("http://") || self.cache.starts_with("https://") {
+            let mut split = self.cache.rsplitn(2, '/');
+            let cache_id = split
+                .next()
+                .expect("rsplit must return at least one element");
+            let base_url = split
+                .next()
+                .ok_or(anyhow!("Invalid remote cache URL: {}", self.cache))?;
+            Ok(CacheDispatcher::Remote(RemoteCache::new(
+                &Url::parse(base_url)?,
+                cache_id,
+                HttpClient::default()?,
+            )?))
+        } else {
+            let path = PathBuf::from(&self.cache)
+                .canonicalize()
+                .and_then(|path| {
+                    if !path.is_dir() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::NotADirectory,
+                            "Not a directory",
+                        ));
+                    }
+                    Ok(path)
+                })
+                .with_context(|| format!("Could not access cache: {}", &self.cache))?;
+            let storage = FilesystemStorage::new(path);
+            Ok(CacheDispatcher::Filesystem(LocalCache::new(storage)))
+        }
     }
 }
 
@@ -153,14 +172,15 @@ fn main() -> Result<ExitCode, anyhow::Error> {
             max_age,
             max_size,
         } => {
-            let mut cache = cache_ref.to_cache()?;
-            cache.clean(
-                max_age
-                    .map(|max_age| chrono::TimeDelta::from_std(*max_age.as_ref()))
-                    .transpose()?,
-                max_size,
-            )?;
-            cache.into_storage().clean_leftover_tmp_files()?;
+            if let CacheDispatcher::Filesystem(mut cache) = cache_ref.to_cache()? {
+                cache.clean(
+                    max_age
+                        .map(|max_age| chrono::TimeDelta::from_std(*max_age.as_ref()))
+                        .transpose()?,
+                    max_size,
+                )?;
+                cache.into_storage().clean_leftover_tmp_files()?;
+            }
         }
         Commands::Hash { path } => {
             let file =
