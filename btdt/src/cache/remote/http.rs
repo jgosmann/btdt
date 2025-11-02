@@ -187,6 +187,10 @@ impl HttpRequest<AwaitingRequestHeaders<TNone>> {
         Self::method("POST", url)
     }
 
+    pub fn put(url: &Url) -> Result<Self> {
+        Self::method("PUT", url)
+    }
+
     fn connect(url: &Url) -> Result<BufWriter<TcpStream>> {
         let use_tls = match url.scheme() {
             "http" => false,

@@ -16,7 +16,12 @@ pub enum GetFromCacheResponse {
     CacheNotFound,
     /// The data was found in the cache and is returned as a binary response.
     #[oai(status = 200)]
-    CacheHit(Binary<Body>),
+    CacheHit(
+        Binary<Body>,
+        /// The cache key that was used to retrieve the data.
+        #[oai(header = "Btdt-Cache-Key")]
+        String,
+    ),
 }
 
 impl<'a, R> From<CacheHit<'a, R>> for GetFromCacheResponse
@@ -24,9 +29,12 @@ where
     R: Read + Send + 'static,
 {
     fn from(hit: CacheHit<R>) -> Self {
-        GetFromCacheResponse::CacheHit(Binary(Body::from_bytes_stream(StreamAdapter::new(
-            Box::new(hit.reader),
-            hit.size_hint,
-        ))))
+        GetFromCacheResponse::CacheHit(
+            Binary(Body::from_bytes_stream(StreamAdapter::new(
+                Box::new(hit.reader),
+                hit.size_hint,
+            ))),
+            hit.key.to_string(),
+        )
     }
 }

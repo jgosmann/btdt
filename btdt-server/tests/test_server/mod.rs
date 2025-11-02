@@ -2,6 +2,7 @@ use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::{Certificate, Url};
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
+use std::fs;
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
@@ -23,9 +24,20 @@ impl Default for BtdtTestServer {
 
 impl BtdtTestServer {
     pub fn new(env: &BTreeMap<String, String>) -> Self {
+        let config_file = tempfile::Builder::new().suffix(".toml").tempfile().unwrap();
+        fs::write(
+            config_file.path(),
+            "\
+                [caches]\n\
+                test-cache = { type = 'InMemory' }\
+        ",
+        )
+        .unwrap();
+
         static BIND_ADDR: &str = "127.0.0.1:8707";
         let mut command = Command::new(env!("CARGO_BIN_EXE_btdt-server"));
         command.env("BTDT_BIND_ADDRS", BIND_ADDR);
+        command.env("BTDT_SERVER_CONFIG_FILE", config_file.path());
         for (key, value) in env {
             command.env(key, value);
         }
@@ -56,6 +68,10 @@ impl Drop for BtdtTestServer {
 }
 
 impl BtdtTestServer {
+    pub fn base_url(&self) -> &Url {
+        &self.base_url
+    }
+
     pub fn get(&self, path: &str) -> RequestBuilder {
         let url = self.base_url.join(path).expect("Invalid path");
         self.client.get(url)

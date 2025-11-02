@@ -161,7 +161,7 @@ impl Cache for RemoteCache {
             url.query_pairs_mut().append_pair("key", key);
         }
 
-        let try_request = || HttpRequest::post(&url)?.body();
+        let try_request = || HttpRequest::put(&url)?.body();
         let request = try_request()
             .map_err(HttpClientError::into)
             .with_path(url.as_str())?;
@@ -276,7 +276,7 @@ mod tests {
             test_server.request()?,
             format!(
                 "\
-                POST /api/caches/cache-id?key=key1&key=key2 HTTP/1.1\r\n\
+                PUT /api/caches/cache-id?key=key1&key=key2 HTTP/1.1\r\n\
                 Host: {}\r\n\
                 Connection: close\r\n\
                 User-Agent: btdt/{}\r\n\

@@ -9,7 +9,7 @@ use std::io::{Read, Write};
 pub mod blob_id;
 pub mod local;
 mod meta;
-mod remote;
+pub mod remote;
 
 /// A cache manages keys and associated data.
 ///
