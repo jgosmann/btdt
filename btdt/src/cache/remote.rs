@@ -1,12 +1,14 @@
+mod error;
 mod http;
 
 use crate::cache::remote::http::{
-    AwaitingRequestBody, ChunkedTransferEncoding, HttpClientError, HttpRequest, HttpResponse,
+    AwaitingRequestBody, ChunkedTransferEncoding, HttpClient, HttpRequest, HttpResponse,
     ReadResponseBody,
 };
 use crate::cache::{Cache, CacheHit};
 use crate::error::{IoPathError, IoPathResult, WithPath};
 use crate::util::close::Close;
+use error::HttpClientError;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io;
@@ -16,6 +18,7 @@ use url::Url;
 pub struct RemoteCache {
     base_url: Url,
     cache_id: String,
+    client: HttpClient,
 }
 
 impl RemoteCache {
@@ -27,25 +30,25 @@ impl RemoteCache {
                 .join(cache_id)
                 .map_err(|err| RemoteCacheError::InvalidCacheId(cache_id.to_string(), err))?,
             cache_id: cache_id.into(),
+            client: HttpClient::default()?,
         })
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum RemoteCacheError {
     InvalidCacheId(String, url::ParseError),
     HttpError { status: u16 },
+    TlsError { source: rustls::Error },
 }
 
 impl Display for RemoteCacheError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidCacheId(cache_id, _) => {
-                f.write_str("invalid cache ID: ")?;
-                f.write_str(cache_id)
-            }
-            Self::HttpError { status } => f.write_fmt(format_args!("http error: {status}")),
+            Self::InvalidCacheId(cache_id, _) => write!(f, "Invalid cache id: {}", cache_id),
+            Self::HttpError { status } => write!(f, "http error: {status}"),
+            RemoteCacheError::TlsError { source } => write!(f, "tls error: {source}"),
         }
     }
 }
@@ -55,7 +58,14 @@ impl Error for RemoteCacheError {
         match self {
             Self::InvalidCacheId(_, err) => Some(err),
             Self::HttpError { .. } => None,
+            RemoteCacheError::TlsError { source } => Some(source),
         }
+    }
+}
+
+impl From<rustls::Error> for RemoteCacheError {
+    fn from(source: rustls::Error) -> Self {
+        Self::TlsError { source }
     }
 }
 
@@ -102,7 +112,7 @@ impl Cache for RemoteCache {
         for key in keys {
             url.query_pairs_mut().append_pair("key", key);
         }
-        let try_request = || HttpRequest::get(&url)?.no_body()?.read_status();
+        let try_request = || self.client.get(&url)?.no_body()?.read_status();
         let (status, mut response) = try_request()
             .map_err(HttpClientError::into)
             .with_path(url.as_str())?;
@@ -161,7 +171,7 @@ impl Cache for RemoteCache {
             url.query_pairs_mut().append_pair("key", key);
         }
 
-        let try_request = || HttpRequest::put(&url)?.body();
+        let try_request = || self.client.put(&url)?.body();
         let request = try_request()
             .map_err(HttpClientError::into)
             .with_path(url.as_str())?;
@@ -251,14 +261,17 @@ mod tests {
                 .unwrap();
         let cache = RemoteCache::new(test_server.base_url(), "cache-id").unwrap();
         let error = cache.get(&["non-existent"]).err().unwrap().into_io_error();
-        assert_eq!(
-            error
-                .into_inner()
-                .unwrap()
-                .downcast::<RemoteCacheError>()
-                .unwrap(),
-            Box::new(RemoteCacheError::HttpError { status: 404 }),
-        );
+        match *error
+            .into_inner()
+            .unwrap()
+            .downcast::<RemoteCacheError>()
+            .unwrap()
+        {
+            RemoteCacheError::HttpError { status } => {
+                assert_eq!(status, 404);
+            }
+            _ => panic!("unexpected error type"),
+        }
         Ok(())
     }
 

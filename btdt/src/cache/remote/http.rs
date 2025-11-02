@@ -1,8 +1,14 @@
-use std::fmt::{Display, Formatter};
+use crate::cache::remote::error::HttpClientError;
+use rustls::pki_types::{CertificateDer, ServerName};
+use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned, crypto};
+use rustls_platform_verifier::{BuilderVerifierExt, ConfigVerifierExt};
+use std::fmt::Display;
 use std::io;
-use std::io::{BufRead, BufReader, BufWriter, IntoInnerError, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::marker::PhantomData;
 use std::net::TcpStream;
+use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 use url::Url;
 
 const CRLF: &[u8] = b"\r\n";
@@ -46,18 +52,137 @@ pub struct TSome<T> {
 impl OptionTransferEncoding for TNone {}
 impl<T: TransferEncoding> OptionTransferEncoding for TSome<T> {}
 
-pub struct HttpRequest<S: State> {
-    stream: BufWriter<TcpStream>,
-    _state: PhantomData<S>,
+type Result<T> = std::result::Result<T, HttpClientError>;
+
+pub struct HttpClient {
+    tls_client_config: Arc<ClientConfig>,
 }
 
-pub struct HttpResponse<S: State, R: Read = TcpStream> {
-    stream: BufReader<R>,
-    transfer_encoding: Option<TransferEncodingType>,
-    headers_exhausted: bool,
-    is_eof: bool,
-    chunk_bytes_remaining: usize,
-    _state: PhantomData<S>,
+impl HttpClient {
+    pub fn new(tls_client_config: Arc<ClientConfig>) -> Self {
+        Self { tls_client_config }
+    }
+
+    pub fn default() -> std::result::Result<Self, rustls::Error> {
+        Ok(Self {
+            tls_client_config: Arc::new(
+                ClientConfig::builder_with_provider(
+                    Arc::new(crypto::aws_lc_rs::default_provider()),
+                )
+                .with_safe_default_protocol_versions()?
+                .with_platform_verifier()
+                .with_no_client_auth(),
+            ),
+        })
+    }
+
+    pub fn method(
+        &self,
+        method: &str,
+        url: &Url,
+    ) -> Result<HttpRequest<AwaitingRequestHeaders<TNone>>> {
+        let mut stream = self.connect(url)?;
+        stream.write_all(method.as_bytes())?;
+        stream.write_all(b" ")?;
+        stream.write_all(url.path().as_bytes())?;
+        if let Some(query) = url.query() {
+            stream.write_all(b"?")?;
+            stream.write_all(query.as_bytes())?;
+        }
+        stream.write_all(b" ")?;
+        stream.write_all(HTTP_VERSION.as_bytes())?;
+        stream.write_all(CRLF)?;
+
+        let mut client = HttpRequest {
+            stream,
+            _state: PhantomData,
+        };
+
+        client.header("Host", url.host_str().ok_or(HttpClientError::MissingHost)?)?;
+        client.header("Connection", "close")?;
+        client.header("User-Agent", concat!("btdt/", env!("CARGO_PKG_VERSION")))?;
+
+        Ok(client)
+    }
+
+    pub fn get(
+        &self,
+        url: &Url,
+    ) -> Result<HttpRequest<AwaitingRequestHeaders<TSome<NoBodyTransferEncoding>>>> {
+        let client = self.method("GET", url)?;
+        Ok(HttpRequest {
+            stream: client.stream,
+            _state: PhantomData,
+        })
+    }
+
+    pub fn post(&self, url: &Url) -> Result<HttpRequest<AwaitingRequestHeaders<TNone>>> {
+        self.method("POST", url)
+    }
+
+    pub fn put(&self, url: &Url) -> Result<HttpRequest<AwaitingRequestHeaders<TNone>>> {
+        self.method("PUT", url)
+    }
+
+    fn connect(&self, url: &Url) -> Result<MaybeTlsWriter> {
+        let use_tls = match url.scheme() {
+            "http" => false,
+            "https" => true,
+            scheme => Err(HttpClientError::InvalidScheme(scheme.into()))?,
+        };
+        if url.username() != "" || url.password().is_some() {
+            return Err(HttpClientError::UnsupportedFeature(
+                "username/password in URL",
+            ));
+        }
+        let host = url.host_str().ok_or(HttpClientError::MissingHost)?;
+        let port = url.port_or_known_default().expect("default port not known");
+        let stream = TcpStream::connect((host, port))?;
+        if use_tls {
+            let connection = ClientConnection::new(
+                self.tls_client_config.clone(),
+                ServerName::try_from(host.to_string())?,
+            )?;
+            let tls_stream = StreamOwned::new(connection, stream);
+            Ok(MaybeTlsWriter::Tls(BufWriter::new(tls_stream)))
+        } else {
+            Ok(MaybeTlsWriter::Plain(BufWriter::new(stream)))
+        }
+    }
+}
+
+enum MaybeTlsWriter {
+    Plain(BufWriter<TcpStream>),
+    Tls(BufWriter<StreamOwned<ClientConnection, TcpStream>>),
+}
+
+impl Write for MaybeTlsWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            Self::Plain(stream) => stream.write(buf),
+            MaybeTlsWriter::Tls(stream) => stream.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Self::Plain(stream) => stream.flush(),
+            MaybeTlsWriter::Tls(stream) => stream.flush(),
+        }
+    }
+}
+
+impl MaybeTlsWriter {
+    fn into_reader(self) -> io::Result<HttpMessageReader<Box<dyn BufRead>, ReadResponseStatus>> {
+        match self {
+            Self::Plain(stream) => Ok(HttpMessageReader::new(Box::new(BufReader::new(
+                stream.into_inner()?,
+            )))),
+            MaybeTlsWriter::Tls(stream) => {
+                Ok(HttpMessageReader::new(Box::new(stream.into_inner()?)))
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,6 +207,10 @@ impl HttpStatus {
         Ok(status)
     }
 
+    pub fn as_str(&self) -> &str {
+        &self.status_line
+    }
+
     pub fn code(&self) -> &str {
         &self.status_line[HTTP_VERSION.len() + 1..HTTP_VERSION.len() + 4]
     }
@@ -99,118 +228,9 @@ impl HttpStatus {
     }
 }
 
-#[derive(Debug)]
-pub enum HttpClientError {
-    InvalidScheme(String),
-    MissingHost,
-    UnsupportedFeature(&'static str),
-    IoError(io::Error),
-}
-
-impl HttpClientError {
-    pub fn invalid_data(msg: &str) -> Self {
-        HttpClientError::IoError(io::Error::new(io::ErrorKind::InvalidData, msg))
-    }
-}
-
-impl Display for HttpClientError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidScheme(scheme) => write!(f, "unknown URL scheme: {}", scheme),
-            Self::MissingHost => write!(f, "missing host"),
-            Self::UnsupportedFeature(feature) => write!(f, "unsupported feature: {}", feature),
-            Self::IoError(err) => write!(f, "I/O error: {}", err),
-        }
-    }
-}
-
-impl std::error::Error for HttpClientError {}
-
-impl From<io::Error> for HttpClientError {
-    fn from(err: io::Error) -> Self {
-        HttpClientError::IoError(err)
-    }
-}
-
-impl Into<io::Error> for HttpClientError {
-    fn into(self) -> io::Error {
-        match self {
-            HttpClientError::InvalidScheme(_) => io::Error::new(io::ErrorKind::InvalidInput, self),
-            HttpClientError::MissingHost => io::Error::new(io::ErrorKind::InvalidInput, self),
-            HttpClientError::UnsupportedFeature(_) => {
-                io::Error::new(io::ErrorKind::Unsupported, self)
-            }
-            HttpClientError::IoError(err) => err,
-        }
-    }
-}
-
-type Result<T> = std::result::Result<T, HttpClientError>;
-
-impl HttpRequest<AwaitingRequestHeaders<TNone>> {
-    pub fn method(method: &str, url: &Url) -> Result<Self> {
-        let mut stream = Self::connect(url)?;
-        stream.write_all(method.as_bytes())?;
-        stream.write_all(b" ")?;
-        stream.write_all(url.path().as_bytes())?;
-        if let Some(query) = url.query() {
-            stream.write_all(b"?")?;
-            stream.write_all(query.as_bytes())?;
-        }
-        stream.write_all(b" ")?;
-        stream.write_all(HTTP_VERSION.as_bytes())?;
-        stream.write_all(CRLF)?;
-
-        let mut client = Self {
-            stream,
-            _state: PhantomData,
-        };
-
-        client.header("Host", url.host_str().ok_or(HttpClientError::MissingHost)?)?;
-        client.header("Connection", "close")?;
-        client.header("User-Agent", concat!("btdt/", env!("CARGO_PKG_VERSION")))?;
-
-        Ok(client)
-    }
-
-    pub fn get(
-        url: &Url,
-    ) -> Result<HttpRequest<AwaitingRequestHeaders<TSome<NoBodyTransferEncoding>>>> {
-        let client = Self::method("GET", url)?;
-        Ok(HttpRequest {
-            stream: client.stream,
-            _state: PhantomData,
-        })
-    }
-
-    pub fn post(url: &Url) -> Result<Self> {
-        Self::method("POST", url)
-    }
-
-    pub fn put(url: &Url) -> Result<Self> {
-        Self::method("PUT", url)
-    }
-
-    fn connect(url: &Url) -> Result<BufWriter<TcpStream>> {
-        let use_tls = match url.scheme() {
-            "http" => false,
-            "https" => true,
-            scheme => Err(HttpClientError::InvalidScheme(scheme.into()))?,
-        };
-        if use_tls {
-            todo!("TLS support not implemented");
-        }
-        if url.username() != "" || url.password().is_some() {
-            return Err(HttpClientError::UnsupportedFeature(
-                "username/password in URL",
-            ));
-        }
-        let port = url.port_or_known_default().expect("default port not known");
-        Ok(BufWriter::new(TcpStream::connect((
-            url.host_str().ok_or(HttpClientError::MissingHost)?,
-            port,
-        ))?))
-    }
+pub struct HttpRequest<S: State> {
+    stream: MaybeTlsWriter,
+    _state: PhantomData<S>,
 }
 
 impl<T: OptionTransferEncoding> HttpRequest<AwaitingRequestHeaders<T>> {
@@ -225,16 +245,7 @@ impl<T: OptionTransferEncoding> HttpRequest<AwaitingRequestHeaders<T>> {
     pub fn no_body(mut self) -> Result<HttpResponse<ReadResponseStatus>> {
         self.stream.write_all(CRLF)?;
         Ok(HttpResponse {
-            stream: BufReader::new(
-                self.stream
-                    .into_inner()
-                    .map_err(IntoInnerError::into_error)?,
-            ),
-            transfer_encoding: None,
-            is_eof: false,
-            headers_exhausted: false,
-            chunk_bytes_remaining: 0,
-            _state: PhantomData,
+            inner: self.stream.into_reader()?,
         })
     }
 }
@@ -293,16 +304,7 @@ impl Write for HttpRequest<AwaitingRequestBody<ChunkedTransferEncoding>> {
 impl HttpRequest<AwaitingRequestBody<FixedSizeTransferEncoding>> {
     pub fn response(self) -> Result<HttpResponse<ReadResponseStatus>> {
         Ok(HttpResponse {
-            stream: BufReader::new(
-                self.stream
-                    .into_inner()
-                    .map_err(IntoInnerError::into_error)?,
-            ),
-            transfer_encoding: None,
-            headers_exhausted: false,
-            is_eof: false,
-            chunk_bytes_remaining: 0,
-            _state: PhantomData,
+            inner: self.stream.into_reader()?,
         })
     }
 }
@@ -313,43 +315,8 @@ impl HttpRequest<AwaitingRequestBody<ChunkedTransferEncoding>> {
         self.stream.write_all(CRLF)?;
         self.stream.write_all(CRLF)?;
         Ok(HttpResponse {
-            stream: BufReader::new(
-                self.stream
-                    .into_inner()
-                    .map_err(IntoInnerError::into_error)?,
-            ),
-            transfer_encoding: None,
-            headers_exhausted: false,
-            is_eof: false,
-            chunk_bytes_remaining: 0,
-            _state: PhantomData,
+            inner: self.stream.into_reader()?,
         })
-    }
-}
-
-impl<S: State, R: Read> HttpResponse<S, R> {
-    pub fn into_inner_stream(self) -> BufReader<R> {
-        self.stream
-    }
-}
-
-impl HttpResponse<ReadResponseStatus> {
-    pub fn read_status(mut self) -> Result<(HttpStatus, HttpResponse<ReadResponseHeaders>)> {
-        let mut status_line = String::new();
-        self.stream.read_line(&mut status_line)?;
-        let status = HttpStatus::new(status_line.trim_end().to_string())?;
-
-        Ok((
-            status,
-            HttpResponse {
-                stream: self.stream,
-                transfer_encoding: self.transfer_encoding,
-                headers_exhausted: self.headers_exhausted,
-                is_eof: self.is_eof,
-                chunk_bytes_remaining: self.chunk_bytes_remaining,
-                _state: PhantomData,
-            },
-        ))
     }
 }
 
@@ -393,13 +360,69 @@ impl Header {
     }
 }
 
-impl<R: Read> HttpResponse<ReadResponseHeaders, R> {
+struct HttpMessageReader<R: BufRead, S: State> {
+    reader: R,
+    transfer_encoding: Option<TransferEncodingType>,
+    headers_exhausted: bool,
+    is_eof: bool,
+    chunk_bytes_remaining: usize,
+    _state: PhantomData<S>,
+}
+
+impl<R: BufRead, S: State> HttpMessageReader<R, S> {
+    pub fn new(reader: R) -> Self {
+        Self {
+            reader,
+            transfer_encoding: None,
+            headers_exhausted: false,
+            is_eof: false,
+            chunk_bytes_remaining: 0,
+            _state: PhantomData,
+        }
+    }
+}
+
+impl<R: BufRead> HttpMessageReader<R, ReadResponseStatus> {
+    pub fn read_status(
+        mut self,
+    ) -> Result<(HttpStatus, HttpMessageReader<R, ReadResponseHeaders>)> {
+        let mut status_line = String::new();
+        self.reader.read_line(&mut status_line)?;
+        let status = HttpStatus::new(status_line.trim_end().to_string())?;
+
+        Ok((
+            status,
+            HttpMessageReader {
+                reader: self.reader,
+                transfer_encoding: self.transfer_encoding,
+                headers_exhausted: self.headers_exhausted,
+                is_eof: self.is_eof,
+                chunk_bytes_remaining: self.chunk_bytes_remaining,
+                _state: PhantomData,
+            },
+        ))
+    }
+}
+
+impl<R: BufRead> HttpMessageReader<R, ReadResponseHeaders> {
+    #[cfg(test)]
+    fn new_skip_status_line(reader: R) -> Self {
+        Self {
+            reader,
+            transfer_encoding: None,
+            headers_exhausted: false,
+            is_eof: false,
+            chunk_bytes_remaining: 0,
+            _state: PhantomData,
+        }
+    }
+
     pub fn read_next_header(&mut self) -> Result<Option<Header>> {
         if self.headers_exhausted {
             return Ok(None);
         }
         let mut line = String::new();
-        self.stream.read_line(&mut line)?;
+        self.reader.read_line(&mut line)?;
         if line.trim().is_empty() {
             self.headers_exhausted = true;
             return Ok(None);
@@ -420,12 +443,12 @@ impl<R: Read> HttpResponse<ReadResponseHeaders, R> {
         Ok(Some(header))
     }
 
-    pub fn read_body(mut self) -> Result<HttpResponse<ReadResponseBody, R>> {
+    pub fn read_body(mut self) -> Result<HttpMessageReader<R, ReadResponseBody>> {
         while !self.headers_exhausted {
             self.read_next_header()?;
         }
-        Ok(HttpResponse {
-            stream: self.stream,
+        Ok(HttpMessageReader {
+            reader: self.reader,
             transfer_encoding: self.transfer_encoding,
             headers_exhausted: true,
             is_eof: false,
@@ -439,19 +462,7 @@ impl<R: Read> HttpResponse<ReadResponseHeaders, R> {
     }
 }
 
-impl<R: Read> Iterator for HttpResponse<ReadResponseHeaders, R> {
-    type Item = Result<Header>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.read_next_header() {
-            Ok(None) => None,
-            Ok(Some(header)) => Some(Ok(header)),
-            Err(err) => Some(Err(err)),
-        }
-    }
-}
-
-impl<R: Read> Read for HttpResponse<ReadResponseBody, R> {
+impl<R: BufRead> Read for HttpMessageReader<R, ReadResponseBody> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.is_eof {
             return Ok(0);
@@ -463,7 +474,7 @@ impl<R: Read> Read for HttpResponse<ReadResponseBody, R> {
             }
             Some(TransferEncodingType::FixedSize(_)) => {
                 let max_n = buf.len().min(self.chunk_bytes_remaining);
-                self.stream.read(buf[..max_n].as_mut()).inspect(|n| {
+                self.reader.read(buf[..max_n].as_mut()).inspect(|n| {
                     self.chunk_bytes_remaining -= n;
                     if self.chunk_bytes_remaining == 0 {
                         self.is_eof = true;
@@ -473,7 +484,7 @@ impl<R: Read> Read for HttpResponse<ReadResponseBody, R> {
             Some(TransferEncodingType::Chunked) => {
                 if self.chunk_bytes_remaining == 0 {
                     let mut octets = String::new();
-                    self.stream.read_line(&mut octets)?;
+                    self.reader.read_line(&mut octets)?;
                     self.chunk_bytes_remaining =
                         usize::from_str_radix(octets.trim(), 16).map_err(|_| {
                             io::Error::new(
@@ -482,17 +493,17 @@ impl<R: Read> Read for HttpResponse<ReadResponseBody, R> {
                             )
                         })?;
                     if self.chunk_bytes_remaining == 0 {
-                        self.stream.read([0; 2].as_mut())?; // trailing CRLF
+                        self.reader.read([0; 2].as_mut())?; // trailing CRLF
                         self.is_eof = true;
                         return Ok(0);
                     }
                 }
                 let max_n = buf.len().min(self.chunk_bytes_remaining);
-                let n = self.stream.read(&mut buf[..max_n]).inspect(|n| {
+                let n = self.reader.read(&mut buf[..max_n]).inspect(|n| {
                     self.chunk_bytes_remaining -= n;
                 })?;
                 if self.chunk_bytes_remaining == 0 {
-                    self.stream.read_exact([0; 2].as_mut())?; // trailing CRLF
+                    self.reader.read_exact([0; 2].as_mut())?; // trailing CRLF
                 }
                 Ok(n)
             }
@@ -500,12 +511,48 @@ impl<R: Read> Read for HttpResponse<ReadResponseBody, R> {
     }
 }
 
+pub struct HttpResponse<S: State> {
+    inner: HttpMessageReader<Box<dyn BufRead>, S>,
+}
+
+impl HttpResponse<ReadResponseStatus> {
+    pub fn read_status(mut self) -> Result<(HttpStatus, HttpResponse<ReadResponseHeaders>)> {
+        let (status, inner) = self.inner.read_status()?;
+        Ok((status, HttpResponse { inner }))
+    }
+}
+
+impl HttpResponse<ReadResponseHeaders> {
+    pub fn read_next_header(&mut self) -> Result<Option<Header>> {
+        self.inner.read_next_header()
+    }
+
+    pub fn read_body(mut self) -> Result<HttpResponse<ReadResponseBody>> {
+        Ok(HttpResponse {
+            inner: self.inner.read_body()?,
+        })
+    }
+}
+
+impl Read for HttpResponse<ReadResponseBody> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.inner.read(buf)
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use rustls::pki_types::pem::PemObject;
+    use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+    use rustls::{ServerConfig, ServerConnection, StreamOwned, crypto};
     use std::net::{SocketAddr, TcpListener};
+    use std::sync::Arc;
     use std::thread;
     use std::thread::JoinHandle;
+
+    pub static CERTIFICATE_PRIVATE_KEY: &[u8] = include_bytes!("../../../../tls/leaf.key");
+    pub static CERTIFICATE_PEM: &[u8] = include_bytes!("../../../../tls/leaf.pem");
 
     pub const EMPTY_RESPONSE: &str = "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n";
 
@@ -521,7 +568,7 @@ pub mod tests {
             let addr = listener.local_addr()?;
             let base_url =
                 Url::parse(&format!("http://{}:{}", addr.ip().to_string(), addr.port())).unwrap();
-            let join_handle = thread::spawn(move || Self::serve_once(listener, &response));
+            let join_handle = thread::spawn(move || Self::serve_once(listener, &response, None));
             Ok(Self {
                 join_handle,
                 addr,
@@ -529,21 +576,60 @@ pub mod tests {
             })
         }
 
-        fn serve_once(listener: TcpListener, response: &str) -> io::Result<String> {
-            let (mut stream, _) = listener.accept()?;
-            let mut stream = BufReader::new(&mut stream);
+        pub fn start_with_tls(response: String) -> io::Result<Self> {
+            crypto::aws_lc_rs::default_provider()
+                .install_default()
+                .unwrap();
+            let cert = CertificateDer::from_pem_slice(CERTIFICATE_PEM).unwrap();
+            let private_key = PrivateKeyDer::from_pem_slice(CERTIFICATE_PRIVATE_KEY).unwrap();
+            let server_conf = ServerConfig::builder()
+                .with_no_client_auth()
+                .with_single_cert(vec![cert], private_key)
+                .unwrap();
 
+            let listener = TcpListener::bind("127.0.0.1:0")?;
+            let addr = listener.local_addr()?;
+            let base_url = Url::parse(&format!(
+                "https://{}:{}",
+                addr.ip().to_string(),
+                addr.port()
+            ))
+            .unwrap();
+            let join_handle = thread::spawn(move || {
+                Self::serve_once(listener, &response, Some(Arc::new(server_conf)))
+            });
+            Ok(Self {
+                join_handle,
+                addr,
+                base_url,
+            })
+        }
+
+        fn serve_once(
+            listener: TcpListener,
+            response: &str,
+            tls_conf: Option<Arc<ServerConfig>>,
+        ) -> io::Result<String> {
+            let (stream, _) = listener.accept()?;
+            if let Some(tls_conf) = tls_conf {
+                let tls_connection = ServerConnection::new(tls_conf).unwrap();
+                let mut stream = StreamOwned::new(tls_connection, stream);
+                let body = Self::read_request(&mut stream)?;
+                stream.write_all(response.as_bytes())?;
+                Ok(body)
+            } else {
+                let mut stream = BufReader::new(stream);
+                let body = Self::read_request(&mut stream)?;
+                stream.into_inner().write_all(response.as_bytes())?;
+                Ok(body)
+            }
+        }
+
+        fn read_request<R: BufRead>(stream: &mut R) -> io::Result<String> {
             let mut request_line = String::new();
             stream.read_line(&mut request_line)?;
             let mut lines: Vec<String> = vec![request_line];
-            let mut reader: HttpResponse<ReadResponseHeaders, _> = HttpResponse {
-                stream,
-                transfer_encoding: None,
-                headers_exhausted: false,
-                is_eof: false,
-                chunk_bytes_remaining: 0,
-                _state: Default::default(),
-            };
+            let mut reader = HttpMessageReader::new_skip_status_line(stream);
             while let Some(header) = reader
                 .read_next_header()
                 .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?
@@ -557,9 +643,6 @@ pub mod tests {
             let mut body = String::new();
             body_reader.read_to_string(&mut body)?;
             lines.push(body);
-
-            let stream = body_reader.into_inner_stream().into_inner();
-            stream.write_all(response.as_bytes())?;
             Ok(lines.join(""))
         }
 
@@ -586,7 +669,7 @@ pub mod tests {
             addr.port()
         ))
         .unwrap();
-        let response = HttpRequest::get(&url)?.no_body()?;
+        let response = HttpClient::default()?.get(&url)?.no_body()?;
 
         assert_eq!(
             test_server.request()?,
@@ -624,7 +707,9 @@ pub mod tests {
         url.query_pairs_mut().append_pair("query", "foo");
         url.set_fragment(Some("fragment"));
         let body = "{\"hello\": \"world\"}\r\n";
-        let mut request = HttpRequest::post(&url)?.body_with_size(body.len())?;
+        let mut request = HttpClient::default()?
+            .post(&url)?
+            .body_with_size(body.len())?;
         request.write_all(body.as_bytes())?;
         let response = request.response()?;
 
@@ -668,7 +753,7 @@ pub mod tests {
         url.query_pairs_mut().append_pair("query", "foo");
         url.set_fragment(Some("fragment"));
         let body = "{\"hello\": \"world\"}\r\n";
-        let mut request = HttpRequest::post(&url)?.body()?;
+        let mut request = HttpClient::default()?.post(&url)?.body()?;
         request.write_all(&body.as_bytes()[..5])?;
         request.write_all(&body.as_bytes()[5..])?;
         let response = request.response()?;
@@ -718,7 +803,7 @@ pub mod tests {
         let mut url = test_server.base_url().join("path").unwrap();
         url.query_pairs_mut().append_pair("query", "foo");
         url.set_fragment(Some("fragment"));
-        let response = HttpRequest::get(&url)?.no_body()?;
+        let response = HttpClient::default()?.get(&url)?.no_body()?;
 
         let (status, response) = response.read_status()?;
         assert_eq!(status, HttpStatus::new("HTTP/1.1 200 OK".to_string())?);
@@ -744,13 +829,65 @@ pub mod tests {
         let mut url = test_server.base_url().join("path").unwrap();
         url.query_pairs_mut().append_pair("query", "foo");
         url.set_fragment(Some("fragment"));
-        let response = HttpRequest::get(&url)?.no_body()?;
+        let response = HttpClient::default()?.get(&url)?.no_body()?;
 
         let (status, response) = response.read_status()?;
         assert_eq!(status, HttpStatus::new("HTTP/1.1 200 OK".to_string())?);
         let mut buf = String::new();
         response.read_body().unwrap().read_to_string(&mut buf)?;
         assert_eq!(&buf, "Hello, world!\r\n");
+        Ok(())
+    }
+
+    #[test]
+    fn test_tls() -> Result<()> {
+        let root_cert =
+            CertificateDer::from_pem_slice(include_bytes!("../../../../tls/ca.pem")).unwrap();
+        let mut cert_store = RootCertStore::empty();
+        cert_store.add(root_cert).unwrap();
+        let tls_client_config = Arc::new(
+            ClientConfig::builder_with_provider(Arc::new(crypto::aws_lc_rs::default_provider()))
+                .with_safe_default_protocol_versions()
+                .unwrap()
+                .with_root_certificates(cert_store)
+                .with_no_client_auth(),
+        );
+
+        let test_server = TestServer::start_with_tls(EMPTY_RESPONSE.into())?;
+        let addr = test_server.addr();
+        let url = Url::parse(&format!(
+            "https://{}:{}/path?query=foo#fragment",
+            addr.ip().to_string(),
+            addr.port()
+        ))
+        .unwrap();
+        let response = HttpClient::new(tls_client_config).get(&url)?.no_body()?;
+
+        assert_eq!(
+            test_server.request()?,
+            format!(
+                "GET /path?query=foo HTTP/1.1\r\n\
+                Host: {}\r\n\
+                Connection: close\r\n\
+                User-Agent: btdt/{}\r\n\r\n",
+                addr.ip(),
+                env!("CARGO_PKG_VERSION")
+            )
+        );
+
+        let (status, mut response) = response.read_status()?;
+        assert_eq!(
+            status,
+            HttpStatus::new("HTTP/1.1 204 No Content".to_string())?
+        );
+        assert_eq!(
+            response.read_next_header()?,
+            Some(Header::new("Content-Length: 0\r\n".to_string())?)
+        );
+        assert_eq!(response.read_next_header()?, None);
+        let mut buf = String::new();
+        response.read_body().unwrap().read_to_string(&mut buf)?;
+        assert!(buf.is_empty());
         Ok(())
     }
 }
