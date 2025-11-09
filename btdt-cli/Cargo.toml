@@ -25,6 +25,7 @@ clap = { version = "4.5.27", features = ["derive", "unstable-markdown"] }
 humantime = "2.1.0"
 chrono = "0.4.39"
 url = "2.5.7"
+biscuit-auth = "6.0.0"
 
 [dev-dependencies]
 btdt-server = { path = "../btdt-server", version = "0.2.0", features = ["test"] }

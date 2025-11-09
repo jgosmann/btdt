@@ -2,37 +2,46 @@ mod error;
 pub mod http;
 
 use crate::cache::remote::http::{
-    AwaitingRequestBody, ChunkedTransferEncoding, HttpClient, HttpRequest, HttpResponse,
-    ReadResponseBody,
+    AwaitingRequestBody, AwaitingRequestHeaders, ChunkedTransferEncoding, HttpClient, HttpRequest,
+    HttpResponse, OptionTransferEncoding, ReadResponseBody,
 };
 use crate::cache::{Cache, CacheHit};
 use crate::error::{IoPathError, IoPathResult, WithPath};
 use crate::util::close::Close;
+use biscuit_auth::UnverifiedBiscuit;
+use biscuit_auth::macros::block;
 use error::HttpClientError;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::{ErrorKind, Write};
+use std::time::{Duration, SystemTime};
 use url::Url;
 
 pub struct RemoteCache {
     base_url: Url,
+    cache_id: String,
     client: HttpClient,
+    token: UnverifiedBiscuit,
 }
 
 impl RemoteCache {
     pub fn new(
         base_url: &Url,
-        cache_id: &str,
+        cache_id: impl Into<String>,
         client: HttpClient,
+        token: UnverifiedBiscuit,
     ) -> Result<Self, RemoteCacheError> {
+        let cache_id = cache_id.into();
         Ok(RemoteCache {
             base_url: base_url
                 .join("api/caches/")
                 .expect("failed to join API path")
-                .join(cache_id)
+                .join(&cache_id)
                 .map_err(|err| RemoteCacheError::InvalidCacheId(cache_id.to_string(), err))?,
+            cache_id,
             client,
+            token,
         })
     }
 }
@@ -105,7 +114,11 @@ impl Cache for RemoteCache {
         for key in keys {
             url.query_pairs_mut().append_pair("key", key);
         }
-        let try_request = || self.client.get(&url)?.no_body()?.read_status();
+        let try_request = || {
+            let mut request = self.client.get(&url)?;
+            self.add_auth_header(&mut request, Operation::Get, &self.cache_id)?;
+            request.no_body()?.read_status()
+        };
         let (status, mut response) = try_request()
             .map_err(HttpClientError::into)
             .with_path(url.as_str())?;
@@ -164,7 +177,11 @@ impl Cache for RemoteCache {
             url.query_pairs_mut().append_pair("key", key);
         }
 
-        let try_request = || self.client.put(&url)?.body();
+        let try_request = || {
+            let mut request = self.client.put(&url)?;
+            self.add_auth_header(&mut request, Operation::Put, &self.cache_id)?;
+            request.body()
+        };
         let request = try_request()
             .map_err(HttpClientError::into)
             .with_path(url.as_str())?;
@@ -172,12 +189,72 @@ impl Cache for RemoteCache {
     }
 }
 
+enum Operation {
+    Get,
+    Put,
+}
+
+impl AsRef<str> for Operation {
+    fn as_ref(&self) -> &str {
+        match self {
+            Operation::Get => "get",
+            Operation::Put => "put",
+        }
+    }
+}
+
+impl RemoteCache {
+    fn add_auth_header<T: OptionTransferEncoding>(
+        &self,
+        request: &mut HttpRequest<AwaitingRequestHeaders<T>>,
+        operation: Operation,
+        cache_id: &str,
+    ) -> http::Result<()> {
+        let expiration = SystemTime::now()
+            .checked_add(Duration::from_secs(5 * 60))
+            .expect("time overflow");
+        request.header(
+            "Authorization",
+            &format!(
+                "Bearer {}",
+                self.token
+                    .append(block!(
+                        "\
+                            check if operation({operation});\
+                            check if cache({cache});\
+                            check if time($time), $time < {expiration};\
+                        ",
+                        operation = operation.as_ref(),
+                        cache = cache_id,
+                        expiration = expiration,
+                    ))
+                    .unwrap()
+                    .to_base64()
+                    .unwrap()
+            ),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::http::tests::{EMPTY_RESPONSE, TestServer};
     use super::*;
+    use biscuit_auth::KeyPair;
+    use biscuit_auth::macros::biscuit;
     use std::io;
     use std::io::Read;
+
+    fn auth_token() -> UnverifiedBiscuit {
+        UnverifiedBiscuit::from(
+            &biscuit!("")
+                .build(&KeyPair::new())
+                .unwrap()
+                .to_vec()
+                .unwrap(),
+        )
+        .unwrap()
+    }
 
     #[test]
     fn test_get_returns_none_for_empty_keys() {
@@ -186,6 +263,7 @@ mod tests {
             test_server.base_url(),
             "cache-id",
             HttpClient::default().unwrap(),
+            auth_token(),
         )
         .unwrap();
         assert!(cache.get(&[]).unwrap().is_none());
@@ -199,6 +277,7 @@ mod tests {
             test_server.base_url(),
             "cache-id",
             HttpClient::default().unwrap(),
+            auth_token(),
         )
         .unwrap();
         assert!(cache.get(&["non-existent"])?.is_none());
@@ -210,7 +289,8 @@ mod tests {
                 GET /api/caches/cache-id?key=non-existent HTTP/1.1\r\n\
                 Host: {}\r\n\
                 Connection: close\r\n\
-                User-Agent: btdt/{}\r\n\r\n\
+                User-Agent: btdt/{}\r\n\
+                Authorization: <auth-header-value>\r\n\r\n\
             ",
                 addr.ip(),
                 env!("CARGO_PKG_VERSION")
@@ -232,6 +312,7 @@ mod tests {
             test_server.base_url(),
             "cache-id",
             HttpClient::default().unwrap(),
+            auth_token(),
         )
         .unwrap();
         let CacheHit {
@@ -253,7 +334,8 @@ mod tests {
                 GET /api/caches/cache-id?key=non-existent&key=existent HTTP/1.1\r\n\
                 Host: {}\r\n\
                 Connection: close\r\n\
-                User-Agent: btdt/{}\r\n\r\n\
+                User-Agent: btdt/{}\r\n\
+                Authorization: <auth-header-value>\r\n\r\n\
             ",
                 addr.ip(),
                 env!("CARGO_PKG_VERSION")
@@ -272,6 +354,7 @@ mod tests {
             test_server.base_url(),
             "cache-id",
             HttpClient::default().unwrap(),
+            auth_token(),
         )
         .unwrap();
         let error = cache.get(&["non-existent"]).err().unwrap().into_io_error();
@@ -297,6 +380,7 @@ mod tests {
             test_server.base_url(),
             "cache-id",
             HttpClient::default().unwrap(),
+            auth_token(),
         )
         .unwrap();
         let mut writer = cache.set(&["key1", "key2"])?;
@@ -312,6 +396,7 @@ mod tests {
                 Host: {}\r\n\
                 Connection: close\r\n\
                 User-Agent: btdt/{}\r\n\
+                Authorization: <auth-header-value>\r\n\
                 Transfer-Encoding: chunked\r\n\
                 \r\n\
                 Test data",

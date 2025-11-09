@@ -136,8 +136,7 @@ impl<E: Endpoint> Endpoint for ErrorLogMiddlewareImpl<E> {
 }
 
 fn load_or_create_auth_keys(private_key_path: &str) -> Result<KeyPair, Box<dyn Error>> {
-    let humanize_auth_key_error =
-        |err| format!("BTDT_AUTH_PRIVATE_KEY={}: {err}", private_key_path);
+    let humanize_auth_key_error = |err| format!("BTDT_AUTH_PRIVATE_KEY={private_key_path}: {err}");
     if !fs::exists(private_key_path).map_err(humanize_auth_key_error)? {
         let mut keyfile = OpenOptions::new()
             .mode(0o600)
@@ -152,7 +151,7 @@ fn load_or_create_auth_keys(private_key_path: &str) -> Result<KeyPair, Box<dyn E
         let auth_private_key_meta =
             fs::metadata(private_key_path).map_err(humanize_auth_key_error)?;
         if auth_private_key_meta.permissions().mode() & 0o077 != 0 {
-            return Err(format!("The private key file {} for authentication must not be accessible by group or others. Please set its permission to 0600 or similar.", private_key_path).into());
+            return Err(format!("The private key file {private_key_path} for authentication must not be accessible by group or others. Please set its permission to 0600 or similar.").into());
         };
         let mut keyfile = File::open(private_key_path).map_err(humanize_auth_key_error)?;
         let mut key_pem = Zeroizing::new(String::new());
@@ -169,7 +168,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let settings = BtdtServerConfig::load()?;
 
-    let _key_pair = load_or_create_auth_keys(&settings.auth_private_key)?;
+    let auth_key_pair = load_or_create_auth_keys(&settings.auth_private_key)?;
 
     let mut listener: BoxListener = settings
         .bind_addrs
@@ -204,6 +203,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .enable_api_docs(settings.enable_api_docs)
                     .build(),
                 &settings.caches,
+                auth_key_pair,
             )
             .with(AccessLogMiddleware {})
             .with(ErrorLogMiddleware {}),

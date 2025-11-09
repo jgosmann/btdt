@@ -1,9 +1,15 @@
+use biscuit_auth::macros::biscuit;
+use biscuit_auth::{KeyPair, UnverifiedBiscuit};
 use btdt::cache::remote::RemoteCache;
 use btdt::cache::remote::http::HttpClient;
 use btdt::pipeline::Pipeline;
 use btdt_server_lib::test_server::BtdtTestServer;
 use serial_test::serial;
+use std::collections::BTreeMap;
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::os::unix::fs::OpenOptionsExt;
 use tempfile::tempdir;
 
 #[test]
@@ -21,12 +27,33 @@ fn test_health_endpoint() {
 #[test]
 #[serial]
 fn test_roundtrip() {
-    let server = BtdtTestServer::default().wait_until_ready().unwrap();
+    let key_dir = tempdir().unwrap();
+    let key_path = key_dir.path().join("private_key.pem");
+    let key_pair = KeyPair::new();
+    let mut keyfile = OpenOptions::new()
+        .mode(0o600)
+        .create_new(true)
+        .write(true)
+        .open(&key_path)
+        .unwrap();
+    keyfile
+        .write_all(key_pair.to_private_key_pem().unwrap().as_bytes())
+        .unwrap();
+    let token =
+        UnverifiedBiscuit::from(&biscuit!("").build(&key_pair).unwrap().to_vec().unwrap()).unwrap();
+
+    let server = BtdtTestServer::new(&BTreeMap::from([(
+        "BTDT_AUTH_PRIVATE_KEY".into(),
+        key_path.to_str().unwrap().to_string(),
+    )]))
+    .wait_until_ready()
+    .unwrap();
     let mut client = Pipeline::new(
         RemoteCache::new(
             server.base_url(),
             "test-cache",
             HttpClient::default().unwrap(),
+            token,
         )
         .unwrap(),
     );

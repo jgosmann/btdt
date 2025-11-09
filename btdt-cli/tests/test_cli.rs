@@ -1,8 +1,13 @@
 use crate::cache_fixture::CacheFixture;
+use biscuit_auth::macros::biscuit;
+use biscuit_auth::{KeyPair, UnverifiedBiscuit};
 use btdt::test_util::fs_spec::{DirSpec, Node};
 use btdt_server_lib::test_server::BtdtTestServer;
 use std::collections::BTreeMap;
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::process::Command;
 use tempfile::tempdir;
@@ -83,9 +88,37 @@ fn test_roundtrip() {
 
 #[test]
 fn test_remote_roundtrip() {
-    let server = BtdtTestServer::new(&BTreeMap::new())
-        .wait_until_ready()
+    let key_dir = tempdir().unwrap();
+    let key_path = key_dir.path().join("private_key.pem");
+    let key_pair = KeyPair::new();
+    let mut keyfile = OpenOptions::new()
+        .mode(0o600)
+        .create_new(true)
+        .write(true)
+        .open(&key_path)
         .unwrap();
+    keyfile
+        .write_all(key_pair.to_private_key_pem().unwrap().as_bytes())
+        .unwrap();
+
+    let token = biscuit!("").build(&key_pair).unwrap();
+    let token_path = key_dir.path().join("token-file");
+    let mut token_file = OpenOptions::new()
+        .mode(0o600)
+        .create_new(true)
+        .write(true)
+        .open(&token_path)
+        .unwrap();
+    token_file
+        .write_all(token.to_base64().unwrap().as_bytes())
+        .unwrap();
+
+    let server = BtdtTestServer::new(&BTreeMap::from([(
+        "BTDT_AUTH_PRIVATE_KEY".into(),
+        key_path.to_str().unwrap().to_string(),
+    )]))
+    .wait_until_ready()
+    .unwrap();
     let cache_url = server.base_url().join("test-cache").unwrap();
 
     let tempdir = tempdir().unwrap();
@@ -103,6 +136,8 @@ fn test_remote_roundtrip() {
         .arg("store")
         .arg("--cache")
         .arg(cache_url.as_str())
+        .arg("--auth-token-file")
+        .arg(&token_path)
         .arg("--keys")
         .arg("cache-key-0")
         .arg("--keys")
@@ -121,6 +156,8 @@ fn test_remote_roundtrip() {
             .arg("restore")
             .arg("--cache")
             .arg(cache_url.as_str())
+            .arg("--auth-token-file")
+            .arg(&token_path)
             .arg("--keys")
             .arg(format!("cache-key-{}", i))
             .arg(&destination_path)

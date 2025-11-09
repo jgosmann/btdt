@@ -50,7 +50,7 @@ pub struct TSome<T> {
 impl OptionTransferEncoding for TNone {}
 impl<T: TransferEncoding> OptionTransferEncoding for TSome<T> {}
 
-type Result<T> = std::result::Result<T, HttpClientError>;
+pub(crate) type Result<T> = std::result::Result<T, HttpClientError>;
 
 pub struct HttpClient {
     tls_client_config: Arc<ClientConfig>,
@@ -622,7 +622,11 @@ pub mod tests {
                 .read_next_header()
                 .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?
             {
-                lines.push(header.header_line);
+                if header.key().eq_ignore_ascii_case("authorization") {
+                    lines.push("Authorization: <auth-header-value>\r\n".into());
+                } else {
+                    lines.push(header.header_line);
+                }
             }
             lines.push("\r\n".into());
             let mut body_reader = reader

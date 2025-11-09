@@ -1,4 +1,5 @@
 use crate::config::CacheConfig;
+use biscuit_auth::KeyPair;
 use poem::Route;
 use std::collections::HashMap;
 
@@ -40,9 +41,14 @@ impl OptionsBuilder {
     }
 }
 
-pub fn create_route(options: Options, cache_config: &HashMap<String, CacheConfig>) -> Route {
+pub fn create_route(
+    options: Options,
+    cache_config: &HashMap<String, CacheConfig>,
+    auth_key_pair: KeyPair,
+) -> Route {
     const API_PREFIX: &str = "/api";
-    let api_service = api::create_openapi_service(cache_config).url_prefix(API_PREFIX);
+    let api_service =
+        api::create_openapi_service(cache_config, auth_key_pair).url_prefix(API_PREFIX);
     let mut route = Route::new();
     if options.enable_api_docs {
         let docs = api_service.swagger_ui();

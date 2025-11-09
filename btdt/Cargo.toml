@@ -22,6 +22,7 @@ rustls-platform-verifier = "0.5.0"
 tar = "0.4.43"
 url = "2.5.7"
 fs2 = "0.4.3"
+biscuit-auth = "6.0.0"
 
 [dev-dependencies]
 criterion = "0.7.0"

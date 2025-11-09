@@ -337,6 +337,7 @@ dependencies = [
 name = "btdt"
 version = "0.2.0"
 dependencies = [
+ "biscuit-auth",
  "blake3",
  "chrono",
  "criterion",
@@ -358,6 +359,7 @@ name = "btdt-cli"
 version = "0.2.0"
 dependencies = [
  "anyhow",
+ "biscuit-auth",
  "blake3",
  "btdt",
  "btdt-server",

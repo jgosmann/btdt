@@ -1,6 +1,7 @@
 mod humanbytes;
 
 use anyhow::{Context, anyhow};
+use biscuit_auth::UnverifiedBiscuit;
 use btdt::cache::cache_dispatcher::CacheDispatcher;
 use btdt::cache::local::LocalCache;
 use btdt::cache::remote::RemoteCache;
@@ -9,9 +10,10 @@ use btdt::pipeline::Pipeline;
 use btdt::storage::filesystem::FilesystemStorage;
 use clap::{Args, Parser, Subcommand};
 use std::fs::File;
-use std::io;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::{fs, io};
 use url::Url;
 
 /// "been there, done that" - a tool for flexible CI caching
@@ -114,6 +116,10 @@ struct CacheRef {
     /// Path to the cache directory.
     #[arg(short, long)]
     cache: String,
+
+    /// File with authentication token for remote caches.
+    #[arg(short, long)]
+    auth_token_file: Option<PathBuf>,
 }
 
 impl CacheEntriesRef {
@@ -140,11 +146,34 @@ impl CacheRef {
             let base_url = split
                 .next()
                 .ok_or(anyhow!("Invalid remote cache URL: {}", self.cache))?;
-            Ok(CacheDispatcher::Remote(RemoteCache::new(
-                &Url::parse(base_url)?,
-                cache_id,
-                HttpClient::default()?,
-            )?))
+            if let Some(auth_token_file) = &self.auth_token_file {
+                let auth_private_key_meta = fs::metadata(auth_token_file)
+                    .with_context(|| format!("stat on {}", auth_token_file.display()))?;
+                if auth_private_key_meta.permissions().mode() & 0o077 != 0 {
+                    return Err(anyhow!(
+                        "The authentication token file {} must not be accessible by group or others. Please set its permission to 0600 or similar.",
+                        auth_token_file.display()
+                    ));
+                };
+                let token_bytes = fs::read(auth_token_file).with_context(|| {
+                    format!(
+                        "Could not read authentication token from file: {}",
+                        auth_token_file.display()
+                    )
+                })?;
+                let token = UnverifiedBiscuit::from_base64(token_bytes)
+                    .with_context(|| "Could not parse authentication token")?;
+                Ok(CacheDispatcher::Remote(RemoteCache::new(
+                    &Url::parse(base_url)?,
+                    cache_id,
+                    HttpClient::default()?,
+                    token,
+                )?))
+            } else {
+                Err(anyhow!(
+                    "Authentication token is required for remote cache.",
+                ))
+            }
         } else {
             let path = PathBuf::from(&self.cache)
                 .canonicalize()
