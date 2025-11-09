@@ -10,6 +10,7 @@ pub struct BtdtServerConfig {
     pub enable_api_docs: bool,
     pub tls_keystore: String,
     pub tls_keystore_password: String,
+    pub auth_private_key: String,
 
     pub caches: HashMap<String, CacheConfig>,
 }
@@ -92,6 +93,7 @@ impl ConfigLoader {
             .set_default("enable_api_docs", true)?
             .set_default("tls_keystore", "".to_string())?
             .set_default("tls_keystore_password", "".to_string())?
+            .set_default("auth_private_key", "".to_string())?
             .set_default("caches", HashMap::<String, String>::new())?
             .build()?
             .try_deserialize()
@@ -115,6 +117,7 @@ mod tests {
                 enable_api_docs: true,
                 tls_keystore: "".to_string(),
                 tls_keystore_password: "".to_string(),
+                auth_private_key: "".to_string(),
                 caches: HashMap::new(),
             }
         )
@@ -127,6 +130,7 @@ mod tests {
             enable_api_docs = false
             tls_keystore = 'path/certificate.p12'
             tls_keystore_password = 'password'
+            auth_private_key = 'path/private-key'
 
             [caches]
             in_memory = { type = 'InMemory' }
@@ -141,6 +145,7 @@ mod tests {
                 enable_api_docs: false,
                 tls_keystore: "path/certificate.p12".to_string(),
                 tls_keystore_password: "password".to_string(),
+                auth_private_key: "path/private-key".to_string(),
                 caches: HashMap::from([
                     ("in_memory".to_string(), CacheConfig::InMemory),
                     (
@@ -170,6 +175,10 @@ mod tests {
                 "BTDT_TLS_KEYSTORE_PASSWORD".to_string(),
                 "password".to_string(),
             ),
+            (
+                "BTDT_AUTH_PRIVATE_KEY".to_string(),
+                "path/private-key".to_string(),
+            ),
         ]);
         let parsed_config = ConfigLoader::new()
             .add_environment_source(Some(env))
@@ -182,6 +191,7 @@ mod tests {
                 enable_api_docs: false,
                 tls_keystore: "path/certificate.p12".to_string(),
                 tls_keystore_password: "password".to_string(),
+                auth_private_key: "path/private-key".to_string(),
                 caches: HashMap::new(),
             }
         );

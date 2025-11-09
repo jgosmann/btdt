@@ -1,5 +1,6 @@
 use crate::app::Options;
 use crate::config::BtdtServerConfig;
+use biscuit_auth::KeyPair;
 use chrono::Local;
 use data_encoding::BASE64;
 use poem::listener::{BoxListener, Listener, NativeTlsConfig};
@@ -10,8 +11,11 @@ use poem::{
 use std::borrow::Cow;
 use std::convert::Infallible;
 use std::error::Error;
-use std::fs::File;
-use std::io::Read;
+use std::fs;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Write};
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use zeroize::Zeroizing;
 
 mod app;
 mod config;
@@ -131,11 +135,42 @@ impl<E: Endpoint> Endpoint for ErrorLogMiddlewareImpl<E> {
     }
 }
 
+fn load_or_create_auth_keys(private_key_path: &str) -> Result<KeyPair, Box<dyn Error>> {
+    let humanize_auth_key_error =
+        |err| format!("BTDT_AUTH_PRIVATE_KEY={}: {err}", private_key_path);
+    if !fs::exists(private_key_path).map_err(humanize_auth_key_error)? {
+        let mut keyfile = OpenOptions::new()
+            .mode(0o600)
+            .create_new(true)
+            .write(true)
+            .open(private_key_path)
+            .map_err(humanize_auth_key_error)?;
+        let key_pair = KeyPair::new();
+        keyfile.write_all(key_pair.to_private_key_pem().unwrap().as_bytes())?;
+        Ok(key_pair)
+    } else {
+        let auth_private_key_meta =
+            fs::metadata(private_key_path).map_err(humanize_auth_key_error)?;
+        if auth_private_key_meta.permissions().mode() & 0o077 != 0 {
+            return Err(format!("The private key file {} for authentication must not be accessible by group or others. Please set its permission to 0600 or similar.", private_key_path).into());
+        };
+        let mut keyfile = File::open(private_key_path).map_err(humanize_auth_key_error)?;
+        let mut key_pem = Zeroizing::new(String::new());
+        keyfile
+            .read_to_string(&mut key_pem)
+            .map_err(humanize_auth_key_error)?;
+        Ok(KeyPair::from_private_key_pem(&key_pem)?)
+    }
+}
+
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn Error>> {
     println!("{} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
 
     let settings = BtdtServerConfig::load()?;
+
+    let _key_pair = load_or_create_auth_keys(&settings.auth_private_key)?;
+
     let mut listener: BoxListener = settings
         .bind_addrs
         .iter()

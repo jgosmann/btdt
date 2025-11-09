@@ -2,10 +2,10 @@ use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::{Certificate, Url};
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
-use std::fs;
-use std::process::{Child, Command};
+use std::process::{Child, Command, ExitStatus};
 use std::time::{Duration, Instant};
-use tempfile::NamedTempFile;
+use std::{fs, io};
+use tempfile::{NamedTempFile, TempDir, tempdir};
 
 #[allow(unused)]
 pub static CERTIFICATE_PKCS12: &[u8] = include_bytes!("../../tls/leaf.p12");
@@ -13,6 +13,7 @@ pub static CERTIFICATE_PEM: &[u8] = include_bytes!("../../tls/ca.pem");
 
 pub struct BtdtTestServer {
     _config_file: NamedTempFile,
+    _private_key_dir: Option<TempDir>,
     process: Child,
     client: Client,
     base_url: Url,
@@ -38,16 +39,37 @@ impl BtdtTestServer {
 
         static BIND_ADDR: &str = "127.0.0.1:8707";
         let mut command = Command::new("cargo");
-        command.args(&["run", "--package", "btdt-server", "--bin", "btdt-server"]);
+        command.args(&[
+            "run",
+            "--profile",
+            "test",
+            "--package",
+            "btdt-server",
+            "--bin",
+            "btdt-server",
+        ]);
         command.env("BTDT_BIND_ADDRS", BIND_ADDR);
         command.env("BTDT_SERVER_CONFIG_FILE", config_file.path());
         for (key, value) in env {
             command.env(key, value);
         }
+
+        let private_key_dir = if !env.contains_key("BTDT_AUTH_PRIVATE_KEY") {
+            let private_key_dir = tempdir().unwrap();
+            command.env(
+                "BTDT_AUTH_PRIVATE_KEY",
+                private_key_dir.path().join("auth-private-key"),
+            );
+            Some(private_key_dir)
+        } else {
+            None
+        };
+
         let process = command.spawn().expect("failed to start btdt-server");
         let tls_enabled = env.contains_key("BTDT_TLS_KEYSTORE");
         Self {
             _config_file: config_file,
+            _private_key_dir: private_key_dir,
             process,
             client: Client::builder()
                 .add_root_certificate(Certificate::from_pem(CERTIFICATE_PEM).unwrap())
@@ -94,6 +116,16 @@ impl BtdtTestServer {
                 return Ok(self);
             }
             std::thread::sleep(Duration::from_millis(100));
+        }
+        Err(WaitTimeout)
+    }
+
+    pub fn wait_for_shutdown(mut self) -> Result<io::Result<ExitStatus>, WaitTimeout> {
+        let start = Instant::now();
+        while start.elapsed() < Duration::from_secs(60) {
+            if let Some(status) = self.process.try_wait().transpose() {
+                return Ok(status);
+            }
         }
         Err(WaitTimeout)
     }
