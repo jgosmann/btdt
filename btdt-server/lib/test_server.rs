@@ -2,9 +2,10 @@ use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::{Certificate, Url};
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
+use std::path::PathBuf;
 use std::process::{Child, Command, ExitStatus};
 use std::time::{Duration, Instant};
-use std::{fs, io};
+use std::{env, fs, io};
 use tempfile::{NamedTempFile, TempDir, tempdir};
 
 #[allow(unused)]
@@ -37,6 +38,24 @@ impl BtdtTestServer {
         )
         .unwrap();
 
+        let target_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target-test");
+        let mut build_command = Command::new("cargo");
+        build_command.args(&[
+            "build",
+            "--profile",
+            "test",
+            "--package",
+            "btdt-server",
+            "--bin",
+            "btdt-server",
+            "--target-dir",
+            target_dir.to_str().unwrap(),
+        ]);
+        let mut process = build_command.spawn().expect("failed to build btdt-server");
+        if !process.wait().unwrap().success() {
+            panic!("failed to build btdt-server");
+        }
+
         static BIND_ADDR: &str = "127.0.0.1:8707";
         let mut command = Command::new("cargo");
         command.args(&[
@@ -47,7 +66,10 @@ impl BtdtTestServer {
             "btdt-server",
             "--bin",
             "btdt-server",
+            "--target-dir",
+            target_dir.to_str().unwrap(),
         ]);
+        command.env("CARGO_TARGET_DIR", "foo");
         command.env("BTDT_BIND_ADDRS", BIND_ADDR);
         command.env("BTDT_SERVER_CONFIG_FILE", config_file.path());
         for (key, value) in env {
