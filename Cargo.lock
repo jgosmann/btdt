@@ -384,7 +384,6 @@ dependencies = [
  "config",
  "criterion",
  "data-encoding",
- "fs2",
  "futures-core",
  "poem",
  "poem-openapi",
