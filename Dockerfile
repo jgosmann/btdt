@@ -1,8 +1,8 @@
 FROM rust:1 AS builder
 WORKDIR /app
 COPY . /app
-RUN cargo build --release
+RUN cargo build --bin btdt --release
 
-FROM gcr.io/distroless/cc-debian12
+FROM gcr.io/distroless/cc-debian13
 COPY --from=builder /app/target/release/btdt /btdt
-ENTRYPOINT ["btdt"]
+ENTRYPOINT ["/btdt"]
