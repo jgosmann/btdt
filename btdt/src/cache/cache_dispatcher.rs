@@ -11,7 +11,7 @@ use std::io::{Read, Write};
 pub enum CacheDispatcher {
     InMemory(LocalCache<InMemoryStorage>),
     Filesystem(LocalCache<FilesystemStorage>),
-    Remote(RemoteCache),
+    Remote(Box<RemoteCache>),
 }
 
 impl Cache for CacheDispatcher {

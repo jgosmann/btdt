@@ -163,12 +163,12 @@ impl CacheRef {
                 })?;
                 let token = UnverifiedBiscuit::from_base64(token_bytes)
                     .with_context(|| "Could not parse authentication token")?;
-                Ok(CacheDispatcher::Remote(RemoteCache::new(
+                Ok(CacheDispatcher::Remote(Box::new(RemoteCache::new(
                     &Url::parse(base_url)?,
                     cache_id,
                     HttpClient::default()?,
                     token,
-                )?))
+                )?)))
             } else {
                 Err(anyhow!(
                     "Authentication token is required for remote cache.",
