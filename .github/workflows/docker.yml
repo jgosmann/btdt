@@ -6,11 +6,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag `btdt-cli-vX.Y.Z` to build a Docker image for.'
+        description: 'Version tag `btdt-[cli|server]-vX.Y.Z` to build a Docker image for.'
         required: true
-
-env:
-  IMAGE_NAME: jgosmann/btdt
 
 jobs:
   publish:
@@ -20,9 +17,17 @@ jobs:
       packages: write
 
     steps:
-      - name: Set version from ref
-        id: version
-        run: REF=${{ inputs.version || github.event.release.tag_name }}; TAG=${REF#refs/*/}; TAG=${TAG#btdt-cli-}; echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+      - name: Extract image name and version
+        id: version-info
+        run: |
+          REF=${{ inputs.version || github.event.release.tag_name }};
+          TAG=${REF#refs/*/};
+          VERSION=${TAG#btdt-*-}
+          COMPONENT=${TAG%-v*};
+          
+          echo "component=${COMPONENT}" >> $GITHUB_OUTPUT
+          echo "image_name=${COMPONENT}/btdt-cli/btdt}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION#v}" >> $GITHUB_OUTPUT
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -49,7 +54,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: ${{ steps.version-info.outputs.image_name }}
 
       - name: Get tags for Docker image
         id: image-tags
@@ -59,8 +64,8 @@ jobs:
           curl  --header "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" --header "X-GitHub-Api-Version: 2022-11-28" \
               https://api.github.com/repos/jgosmann/btdt/releases \
           | jq --raw-output '.[]["tag_name"] | sub("^v"; "")' \
-          | docker run --rm jgosmann/gen-semver-tags:0.1 ${{ steps.version.outputs.version }} \
-          | awk '{print "${{ env.IMAGE_NAME }}:"$0}' \
+          | docker run --rm jgosmann/gen-semver-tags:0.1 ${{ steps.version-info.outputs.version }} \
+          | awk '{print "${{ steps.version-info.outputs.image_name }}:"$0}' \
           >> "$GITHUB_OUTPUT"
           echo 'EOF' >> "$GITHUB_OUTPUT"
 
