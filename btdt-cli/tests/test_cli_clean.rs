@@ -5,7 +5,7 @@ use btdt::storage::filesystem::FilesystemStorage;
 use std::fs::{File, create_dir_all};
 use std::process::Command;
 
-mod cache_fixture;
+pub mod cache_fixture;
 
 #[test]
 fn test_clean_removes_entries_based_on_max_age() {

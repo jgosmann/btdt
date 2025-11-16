@@ -1,6 +1,6 @@
 use crate::cache_fixture::CacheFixture;
+use biscuit_auth::KeyPair;
 use biscuit_auth::macros::biscuit;
-use biscuit_auth::{KeyPair, UnverifiedBiscuit};
 use btdt::test_util::fs_spec::{DirSpec, Node};
 use btdt_server_lib::test_server::BtdtTestServer;
 use std::collections::BTreeMap;
@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use tempfile::tempdir;
 
-mod cache_fixture;
+pub mod cache_fixture;
 
 #[test]
 fn test_cmd() {
