@@ -20,13 +20,13 @@ jobs:
       - name: Extract image name and version
         id: version-info
         run: |
-          REF=${{ inputs.version || github.event.release.tag_name }};
-          TAG=${REF#refs/*/};
+          REF=${{ inputs.version || github.event.release.tag_name }}
+          TAG=${REF#refs/*/}
           VERSION=${TAG#btdt-*-}
-          COMPONENT=${TAG%-v*};
+          COMPONENT=${TAG%-v*}
           
           echo "component=${COMPONENT}" >> $GITHUB_OUTPUT
-          echo "image_name=${COMPONENT}/btdt-cli/btdt}" >> $GITHUB_OUTPUT
+          echo "image_name=${COMPONENT}/btdt-cli/btdt" >> $GITHUB_OUTPUT
           echo "version=${VERSION#v}" >> $GITHUB_OUTPUT
 
       - name: Checkout repository
