@@ -10,12 +10,12 @@ version_group = "btdt"
 name = "btdt-cli"
 changelog_include = ["btdt"]
 changelog_path = "CHANGELOG.md"
-git_release_name = "v{{ version }}"
+git_release_name = "btdt-cli v{{ version }}"
 version_group = "btdt"
 
 [[package]]
 name = "btdt-server"
 changelog_include = ["btdt"]
 changelog_path = "CHANGELOG.md"
-git_release_name = "v{{ version }}"
+git_release_name = "btdt-server v{{ version }}"
 version_group = "btdt"
