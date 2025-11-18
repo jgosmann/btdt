@@ -1,12 +1,19 @@
 FROM rust:1 AS builder
+ARG TARGETARCH
 WORKDIR /app
 COPY . /app
 RUN cargo build --bin btdt-server --release
 RUN ldd /app/target/release/btdt-server
+RUN case ${TARGETARCH} in \
+    arm64) DEBARCH="aarch64" ;; \
+    amd64) DEBARCH="x86_64" ;; \
+    *) DEBARCH="${TARGETARCH}" ;; \
+    esac && \
+    mkdir -p /tmp/rootfs/lib/${DEBARCH}-linux-gnu && \
+    cp /lib/${DEBARCH}-linux-gnu/libzstd.so.1 /tmp/rootfs/lib/${DEBARCH}-linux-gnu/libzstd.so.1
 
 FROM gcr.io/distroless/cc-debian13
-ARG TARGETARCH
-COPY --from=builder /lib/${TARGETARCH/arm64/aarch64}-linux-gnu/libzstd.so.1 /lib/${TARGETARCH/arm64/aarch64}-linux-gnu/libzstd.so.1
+COPY --from=builder /tmp/rootfs/ /
 COPY --from=builder /app/target/release/btdt-server /btdt-server
 ENV BTDT_AUTH_PRIVATE_KEY=/auth_private_key.pem
 ENV BTDT_SERVER_CONFIG_FILE=/config.toml
