@@ -19,7 +19,7 @@ name = "btdt_server_lib"
 path = "lib/lib.rs"
 
 [dependencies]
-btdt = { path = "../btdt", version = "0.3.1" }
+btdt = { path = "../btdt", version = "0.3.2" }
 bytes = "1.10.1"
 config = { version = "0.15.13", features = ["toml"] }
 futures-core = "0.3.31"

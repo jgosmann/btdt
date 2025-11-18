@@ -19,7 +19,7 @@ doc = false
 
 [dependencies]
 anyhow = "1.0.95"
-btdt = { path = "../btdt", version = "0.3.1" }
+btdt = { path = "../btdt", version = "0.3.2" }
 blake3 = "1.5.5"
 clap = { version = "4.5.27", features = ["derive", "unstable-markdown"] }
 humantime = "2.1.0"
