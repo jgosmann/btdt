@@ -13,7 +13,7 @@ RUN case ${TARGETARCH} in \
     cp /lib/${DEBARCH}-linux-gnu/libzstd.so.1 /tmp/rootfs/lib/${DEBARCH}-linux-gnu/libzstd.so.1
 
 FROM gcr.io/distroless/cc-debian13
-COPY --from=builder /tmp/rootfs/ /
+COPY --from=builder /tmp/rootfs/lib /lib
 COPY --from=builder /app/target/release/btdt-server /btdt-server
 ENV BTDT_AUTH_PRIVATE_KEY=/auth_private_key.pem
 ENV BTDT_SERVER_CONFIG_FILE=/config.toml
