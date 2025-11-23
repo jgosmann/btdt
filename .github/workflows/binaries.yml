@@ -55,6 +55,9 @@ jobs:
           echo "component=${COMPONENT}" >> $GITHUB_OUTPUT
           echo "binary_name=${COMPONENT/btdt-cli/btdt}" >> $GITHUB_OUTPUT
           echo "version=${VERSION#v}" >> $GITHUB_OUTPUT
+      - name: Install OpenSSL (Linux only)
+        if: matrix.os != 'macos-latest'
+        run: sudo apt-get update && sudo apt-get install -y openssl
       - uses: actions/checkout@v4
       - uses: taiki-e/upload-rust-binary-action@v1
         with:
