@@ -25,25 +25,9 @@ pub struct Api {
 }
 
 pub fn create_openapi_service(
-    config: &HashMap<String, CacheConfig>,
+    caches: HashMap<String, CacheDispatcher>,
     auth_key_pair: KeyPair,
 ) -> OpenApiService<Api, ()> {
-    let caches = config
-        .iter()
-        .map(|(key, cache_config)| {
-            (
-                key.clone(),
-                match cache_config {
-                    CacheConfig::InMemory => {
-                        CacheDispatcher::InMemory(LocalCache::new(InMemoryStorage::new()))
-                    }
-                    CacheConfig::Filesystem { path } => CacheDispatcher::Filesystem(
-                        LocalCache::new(FilesystemStorage::new(path.into())),
-                    ),
-                },
-            )
-        })
-        .collect();
     OpenApiService::new(
         Api {
             caches,
