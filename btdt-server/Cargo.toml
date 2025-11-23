@@ -23,6 +23,7 @@ btdt = { path = "../btdt", version = "0.3.2" }
 bytes = "1.10.1"
 config = { version = "0.15.13", features = ["toml"] }
 futures-core = "0.3.31"
+humantime = "2.1.0"
 poem = { version = "3", features = ["native-tls"] }
 poem-openapi = { version = "5", features = ["swagger-ui"] }
 serde = "1.0.219"
