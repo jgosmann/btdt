@@ -33,12 +33,14 @@ jobs:
             os: ubuntu-latest
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
+            skip-for: [btdt-server]
           - target: x86_64-apple-darwin
             os: macos-latest
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
+            skip-for: [btdt-server]
           - target: aarch64-apple-darwin
             os: macos-latest
     runs-on: ${{ matrix.os }}
@@ -55,13 +57,13 @@ jobs:
           echo "component=${COMPONENT}" >> $GITHUB_OUTPUT
           echo "binary_name=${COMPONENT/btdt-cli/btdt}" >> $GITHUB_OUTPUT
           echo "version=${VERSION#v}" >> $GITHUB_OUTPUT
-      - name: Install OpenSSL (Linux only)
-        if: matrix.os != 'macos-latest'
-        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
-      - name: Install Rust target
-        run: rustup target add ${{ matrix.target }}
+      - name: Install toolchain for target
+        run: rustup install ${{ matrix.target }}
+        if: ${{ !contains(matrix.skip-for, steps.version-info.outputs.component) }}
       - uses: actions/checkout@v4
+        if: ${{ !contains(matrix.skip-for, steps.version-info.outputs.component) }}
       - uses: taiki-e/upload-rust-binary-action@v1
+        if: ${{ !contains(matrix.skip-for, steps.version-info.outputs.component) }}
         with:
           bin: ${{ steps.version-info.outputs.binary_name }}
           target: ${{ matrix.target }}
