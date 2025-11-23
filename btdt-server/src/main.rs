@@ -15,6 +15,8 @@ use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use tokio::select;
+use tokio::signal::unix::SignalKind;
 use zeroize::Zeroizing;
 
 mod app;
@@ -191,13 +193,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .boxed()
     }
 
+    let mut sigint = tokio::signal::unix::signal(SignalKind::interrupt())?;
+    let mut sigterm = tokio::signal::unix::signal(SignalKind::terminate())?;
+
     let protocol = if enable_tls { "https" } else { "http" };
     for addr in &settings.bind_addrs {
         println!("Listening on {protocol}://{addr}");
     }
 
     Server::new(listener)
-        .run(
+        .run_with_graceful_shutdown(
             app::create_route(
                 Options::builder()
                     .enable_api_docs(settings.enable_api_docs)
@@ -207,6 +212,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
             )
             .with(AccessLogMiddleware {})
             .with(ErrorLogMiddleware {}),
+            (async move || {
+                select! {
+                    _ = sigint.recv() => {},
+                    _ = sigterm.recv() => {},
+                }
+                println!("Shutting down...");
+            })(),
+            None,
         )
         .await?;
     Ok(())

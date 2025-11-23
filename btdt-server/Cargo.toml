@@ -28,7 +28,7 @@ poem-openapi = { version = "5", features = ["swagger-ui"] }
 serde = "1.0.219"
 reqwest = { version = "0.12.22", features = ["blocking", "rustls-tls"], optional = true }
 tempfile = { version = "3.15.0", optional = true }
-tokio = { version = "1.47.1", features = ["rt-multi-thread", "sync"] }
+tokio = { version = "1.47.1", features = ["rt-multi-thread", "signal", "sync"] }
 tokio-util = { version = "0.7.16", features = ["io", "io-util"] }
 data-encoding = "2.9.0"
 chrono = "0.4.42"
