@@ -1,5 +1,3 @@
-mod humanbytes;
-
 use anyhow::{Context, anyhow};
 use biscuit_auth::UnverifiedBiscuit;
 use btdt::cache::cache_dispatcher::CacheDispatcher;
@@ -8,6 +6,7 @@ use btdt::cache::remote::RemoteCache;
 use btdt::cache::remote::http::HttpClient;
 use btdt::pipeline::Pipeline;
 use btdt::storage::filesystem::FilesystemStorage;
+use btdt::util::humanbytes;
 use clap::{Args, Parser, Subcommand};
 use std::fs::File;
 use std::os::unix::fs::PermissionsExt;

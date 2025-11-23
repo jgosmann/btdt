@@ -55,6 +55,7 @@ use std::{fs, io};
 /// # Ok(())
 /// # }
 /// ```
+#[derive(Clone)]
 pub struct FilesystemStorage {
     root: PathBuf,
 }

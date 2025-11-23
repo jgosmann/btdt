@@ -13,7 +13,7 @@ use crate::util::close::SelfClosing;
 use std::borrow::Cow;
 use std::io;
 use std::io::ErrorKind;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 /// In-memory storage implementation.
 ///
@@ -44,16 +44,16 @@ use std::sync::RwLock;
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct InMemoryStorage {
-    root: RwLock<DirNode>,
+    root: Arc<RwLock<DirNode>>,
 }
 
 impl InMemoryStorage {
     /// Creates a new in-memory storage.
     pub fn new() -> Self {
         InMemoryStorage {
-            root: RwLock::new(DirNode::new()),
+            root: Arc::new(RwLock::new(DirNode::new())),
         }
     }
 }

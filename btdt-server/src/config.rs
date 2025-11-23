@@ -12,7 +12,16 @@ pub struct BtdtServerConfig {
     pub tls_keystore_password: String,
     pub auth_private_key: String,
 
+    pub cleanup: CleanupConfig,
+
     pub caches: HashMap<String, CacheConfig>,
+}
+
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
+pub struct CleanupConfig {
+    pub interval: String,
+    pub cache_expiration: String,
+    pub max_cache_size: String,
 }
 
 impl BtdtServerConfig {
@@ -79,6 +88,8 @@ impl ConfigLoader {
     pub fn add_environment_source(mut self, source: Option<Map<String, String>>) -> Self {
         self.0 = self.0.add_source(
             Environment::with_prefix("BTDT")
+                .separator("__")
+                .prefix_separator("_")
                 .try_parsing(true)
                 .list_separator(",")
                 .with_list_parse_key("bind_addrs")
@@ -94,6 +105,9 @@ impl ConfigLoader {
             .set_default("tls_keystore", "".to_string())?
             .set_default("tls_keystore_password", "".to_string())?
             .set_default("auth_private_key", "".to_string())?
+            .set_default("cleanup.interval", "10min")?
+            .set_default("cleanup.cache_expiration", "7days")?
+            .set_default("cleanup.max_cache_size", "50GiB")?
             .set_default("caches", HashMap::<String, String>::new())?
             .build()?
             .try_deserialize()
@@ -103,7 +117,7 @@ impl ConfigLoader {
 
 #[cfg(test)]
 mod tests {
-    use crate::config::{BtdtServerConfig, CacheConfig, ConfigLoader};
+    use super::*;
     use config::{File, FileFormat, Map};
     use std::collections::HashMap;
 
@@ -118,6 +132,11 @@ mod tests {
                 tls_keystore: "".to_string(),
                 tls_keystore_password: "".to_string(),
                 auth_private_key: "".to_string(),
+                cleanup: CleanupConfig {
+                    interval: "10min".to_string(),
+                    cache_expiration: "7days".to_string(),
+                    max_cache_size: "50GiB".to_string(),
+                },
                 caches: HashMap::new(),
             }
         )
@@ -131,6 +150,11 @@ mod tests {
             tls_keystore = 'path/certificate.p12'
             tls_keystore_password = 'password'
             auth_private_key = 'path/private-key'
+
+            [cleanup]
+            interval = '5min'
+            cache_expiration = '14days'
+            max_cache_size = '100GiB'
 
             [caches]
             in_memory = { type = 'InMemory' }
@@ -146,6 +170,11 @@ mod tests {
                 tls_keystore: "path/certificate.p12".to_string(),
                 tls_keystore_password: "password".to_string(),
                 auth_private_key: "path/private-key".to_string(),
+                cleanup: CleanupConfig {
+                    interval: "5min".to_string(),
+                    cache_expiration: "14days".to_string(),
+                    max_cache_size: "100GiB".to_string(),
+                },
                 caches: HashMap::from([
                     ("in_memory".to_string(), CacheConfig::InMemory),
                     (
@@ -179,6 +208,15 @@ mod tests {
                 "BTDT_AUTH_PRIVATE_KEY".to_string(),
                 "path/private-key".to_string(),
             ),
+            ("BTDT_CLEANUP__INTERVAL".to_string(), "5min".to_string()),
+            (
+                "BTDT_CLEANUP__CACHE_EXPIRATION".to_string(),
+                "14days".to_string(),
+            ),
+            (
+                "BTDT_CLEANUP__MAX_CACHE_SIZE".to_string(),
+                "100GiB".to_string(),
+            ),
         ]);
         let parsed_config = ConfigLoader::new()
             .add_environment_source(Some(env))
@@ -192,6 +230,11 @@ mod tests {
                 tls_keystore: "path/certificate.p12".to_string(),
                 tls_keystore_password: "password".to_string(),
                 auth_private_key: "path/private-key".to_string(),
+                cleanup: CleanupConfig {
+                    interval: "5min".to_string(),
+                    cache_expiration: "14days".to_string(),
+                    max_cache_size: "100GiB".to_string(),
+                },
                 caches: HashMap::new(),
             }
         );

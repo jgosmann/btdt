@@ -1,13 +1,9 @@
 use crate::app::get_from_cache::GetFromCacheResponse;
-use crate::config::CacheConfig;
 use biscuit_auth::builder_ext::AuthorizerExt;
 use biscuit_auth::macros::authorizer;
 use biscuit_auth::{Biscuit, KeyPair};
 use btdt::cache::Cache;
 use btdt::cache::cache_dispatcher::CacheDispatcher;
-use btdt::cache::local::LocalCache;
-use btdt::storage::filesystem::FilesystemStorage;
-use btdt::storage::in_memory::InMemoryStorage;
 use btdt::util::close::Close;
 use poem::Body;
 use poem::http::StatusCode;
@@ -25,25 +21,9 @@ pub struct Api {
 }
 
 pub fn create_openapi_service(
-    config: &HashMap<String, CacheConfig>,
+    caches: HashMap<String, CacheDispatcher>,
     auth_key_pair: KeyPair,
 ) -> OpenApiService<Api, ()> {
-    let caches = config
-        .iter()
-        .map(|(key, cache_config)| {
-            (
-                key.clone(),
-                match cache_config {
-                    CacheConfig::InMemory => {
-                        CacheDispatcher::InMemory(LocalCache::new(InMemoryStorage::new()))
-                    }
-                    CacheConfig::Filesystem { path } => CacheDispatcher::Filesystem(
-                        LocalCache::new(FilesystemStorage::new(path.into())),
-                    ),
-                },
-            )
-        })
-        .collect();
     OpenApiService::new(
         Api {
             caches,
@@ -177,6 +157,8 @@ mod tests {
     use super::*;
     use biscuit_auth::Biscuit;
     use biscuit_auth::macros::{biscuit, block};
+    use btdt::cache::local::LocalCache;
+    use btdt::storage::in_memory::InMemoryStorage;
     use poem::Route;
     use poem::http::StatusCode;
     use poem::test::TestClient;

@@ -1,7 +1,11 @@
 use crate::app::Options;
-use crate::config::BtdtServerConfig;
+use crate::config::{BtdtServerConfig, CleanupConfig};
+use crate::storage::StorageHandle;
 use biscuit_auth::KeyPair;
-use chrono::Local;
+use btdt::cache::cache_dispatcher::CacheDispatcher;
+use btdt::error::IoPathResult;
+use btdt::util::humanbytes;
+use chrono::{Local, TimeDelta};
 use data_encoding::BASE64;
 use poem::listener::{BoxListener, Listener, NativeTlsConfig};
 use poem::{
@@ -9,18 +13,24 @@ use poem::{
     listener::TcpListener,
 };
 use std::borrow::Cow;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::Infallible;
 use std::error::Error;
-use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::JoinHandle;
+use std::time::Duration;
+use std::{fs, thread};
 use tokio::select;
 use tokio::signal::unix::SignalKind;
 use zeroize::Zeroizing;
 
 mod app;
 mod config;
+mod storage;
 
 struct AccessLogMiddleware {}
 
@@ -183,15 +193,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let enable_tls = !settings.tls_keystore.is_empty();
     if enable_tls {
         let mut cert_buf = Vec::new();
-        File::open(settings.tls_keystore)?.read_to_end(&mut cert_buf)?;
+        File::open(&settings.tls_keystore)?.read_to_end(&mut cert_buf)?;
         listener = listener
             .native_tls(
                 NativeTlsConfig::new()
                     .pkcs12(cert_buf)
-                    .password(settings.tls_keystore_password),
+                    .password(&settings.tls_keystore_password),
             )
             .boxed()
     }
+
+    let storage_locations: BTreeMap<String, StorageHandle> = settings
+        .caches
+        .iter()
+        .map(|(key, cache_config)| (key.clone(), StorageHandle::from(cache_config)))
+        .collect();
+
+    let cleanup_caches = storage_locations
+        .iter()
+        .map(|(key, storage_handle)| (key.clone(), storage_handle.to_cache()))
+        .collect();
+    let cleanup_task = CleanupTask::new(cleanup_caches, &settings.cleanup)?.run();
+
+    let caches: HashMap<String, CacheDispatcher> = storage_locations
+        .into_iter()
+        .map(|(key, storage_handle)| (key, storage_handle.into_cache()))
+        .collect();
 
     let mut sigint = tokio::signal::unix::signal(SignalKind::interrupt())?;
     let mut sigterm = tokio::signal::unix::signal(SignalKind::terminate())?;
@@ -207,7 +234,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 Options::builder()
                     .enable_api_docs(settings.enable_api_docs)
                     .build(),
-                &settings.caches,
+                caches,
                 auth_key_pair,
             )
             .with(AccessLogMiddleware {})
@@ -222,5 +249,89 @@ async fn main() -> Result<(), Box<dyn Error>> {
             None,
         )
         .await?;
+    cleanup_task.abort();
+    cleanup_task.join().map_err(|_| "Cleanup thread failed.")?;
     Ok(())
+}
+
+struct CleanupTask {
+    caches: HashMap<String, CacheDispatcher>,
+    cleanup_interval: Duration,
+    cache_expiration: TimeDelta,
+    max_cache_size: u64,
+}
+
+impl CleanupTask {
+    pub fn new(
+        caches: HashMap<String, CacheDispatcher>,
+        settings: &CleanupConfig,
+    ) -> Result<Self, Box<dyn Error>> {
+        let cleanup_interval = humantime::parse_duration(&settings.interval)?;
+        let cache_expiration =
+            TimeDelta::from_std(humantime::parse_duration(&settings.cache_expiration)?)?;
+        let max_cache_size = humanbytes::parse_bytes_from_str(&settings.max_cache_size)?;
+        Ok(Self {
+            caches,
+            cleanup_interval,
+            cache_expiration,
+            max_cache_size,
+        })
+    }
+
+    pub fn run(mut self) -> CleanupTaskHandle {
+        let is_aborted_rx = Arc::new(AtomicBool::new(false));
+        let is_aborted_tx = is_aborted_rx.clone();
+        let join_handle = thread::spawn(move || {
+            while !is_aborted_rx.load(Ordering::Relaxed) {
+                thread::sleep(self.cleanup_interval);
+                for cache in self.caches.values_mut() {
+                    if let Err(e) = cache.clean_cache(self.cache_expiration, self.max_cache_size) {
+                        eprintln!("Error during periodic cleanup: {e}");
+                    }
+                }
+            }
+        });
+        CleanupTaskHandle {
+            is_aborted: is_aborted_tx,
+            join_handle,
+        }
+    }
+}
+
+trait Clean {
+    fn clean_cache(&mut self, cache_expiration: TimeDelta, max_cache_size: u64)
+    -> IoPathResult<()>;
+}
+
+impl Clean for CacheDispatcher {
+    fn clean_cache(
+        &mut self,
+        cache_expiration: TimeDelta,
+        max_cache_size: u64,
+    ) -> IoPathResult<()> {
+        match self {
+            CacheDispatcher::InMemory(cache) => {
+                cache.clean(Some(cache_expiration), Some(max_cache_size))
+            }
+            CacheDispatcher::Filesystem(cache) => {
+                cache.clean(Some(cache_expiration), Some(max_cache_size))
+            }
+            CacheDispatcher::Remote(_) => Ok(()),
+        }
+    }
+}
+
+struct CleanupTaskHandle {
+    is_aborted: Arc<AtomicBool>,
+    join_handle: JoinHandle<()>,
+}
+
+impl CleanupTaskHandle {
+    fn abort(&self) {
+        self.is_aborted.store(true, Ordering::Relaxed);
+    }
+
+    fn join(self) -> Result<(), Box<dyn std::any::Any + Send>> {
+        self.join_handle.join()
+    }
 }
