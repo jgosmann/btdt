@@ -35,11 +35,11 @@ jobs:
             os: ubuntu-latest
             skip-for: [btdt-server]
           - target: x86_64-apple-darwin
-            os: macos-latest
+            os: macos-15-intel
           - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-24.04-arm
           - target: aarch64-unknown-linux-musl
-            os: ubuntu-latest
+            os: ubuntu-24.04-arm
             skip-for: [btdt-server]
           - target: aarch64-apple-darwin
             os: macos-latest
@@ -57,9 +57,6 @@ jobs:
           echo "component=${COMPONENT}" >> $GITHUB_OUTPUT
           echo "binary_name=${COMPONENT/btdt-cli/btdt}" >> $GITHUB_OUTPUT
           echo "version=${VERSION#v}" >> $GITHUB_OUTPUT
-      - name: Install toolchain for target
-        run: rustup target add ${{ matrix.target }}
-        if: ${{ !contains(matrix.skip-for, steps.version-info.outputs.component) }}
       - uses: actions/checkout@v4
         if: ${{ !contains(matrix.skip-for, steps.version-info.outputs.component) }}
       - uses: taiki-e/upload-rust-binary-action@v1
