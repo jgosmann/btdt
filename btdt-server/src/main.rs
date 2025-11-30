@@ -2,7 +2,6 @@ use crate::app::Options;
 use crate::config::{BtdtServerConfig, CleanupConfig};
 use crate::storage::StorageHandle;
 use biscuit_auth::KeyPair;
-use biscuit_auth::format::schema::proof;
 use btdt::cache::cache_dispatcher::CacheDispatcher;
 use btdt::error::IoPathResult;
 use btdt::util::http::{HttpClient, Url};
