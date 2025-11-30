@@ -119,6 +119,11 @@ struct CacheRef {
     /// File with authentication token for remote caches.
     #[arg(short, long)]
     auth_token_file: Option<PathBuf>,
+
+    /// Root certificates (in PEM format) to trust for remote caches (instead of system's root
+    /// certificates).
+    #[arg(long)]
+    root_cert: Vec<PathBuf>,
 }
 
 impl CacheEntriesRef {
@@ -162,10 +167,15 @@ impl CacheRef {
                 })?;
                 let token = UnverifiedBiscuit::from_base64(token_bytes)
                     .with_context(|| "Could not parse authentication token")?;
+                let http_client = if self.root_cert.is_empty() {
+                    HttpClient::default()
+                } else {
+                    HttpClient::with_tls_root_cert_paths(&self.root_cert)
+                }?;
                 Ok(CacheDispatcher::Remote(Box::new(RemoteCache::new(
                     &Url::parse(base_url)?,
                     cache_id,
-                    HttpClient::default()?,
+                    http_client,
                     token,
                 )?)))
             } else {

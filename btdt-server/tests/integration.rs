@@ -102,7 +102,7 @@ fn test_health_endpoint() {
 #[test]
 #[serial]
 fn test_health_check_fails_without_running_server() {
-    let mut process = BtdtTestServer::run_health_check("http://example.invalid");
+    let mut process = BtdtTestServer::run_health_check("http://example.invalid", None);
     assert!(!process.wait().unwrap().success());
 }
 
@@ -110,7 +110,7 @@ fn test_health_check_fails_without_running_server() {
 #[serial]
 fn test_health_check_succeeds_with_running_server() {
     let server = BtdtTestServer::default().wait_until_ready().unwrap();
-    let mut process = BtdtTestServer::run_health_check(server.base_url().as_str());
+    let mut process = BtdtTestServer::run_health_check(server.base_url().as_str(), None);
     assert!(process.wait().unwrap().success());
 }
 

@@ -50,11 +50,11 @@ impl BtdtTestServer {
         }
     }
 
-    pub fn run_health_check(base_url: &str) -> Child {
+    pub fn run_health_check(base_url: &str, root_cert: Option<&str>) -> Child {
         Self::build();
         let target_dir = Self::target_dir();
         let mut command = Command::new("cargo");
-        command.args(&[
+        let mut args = vec![
             "run",
             "--profile",
             "test",
@@ -66,8 +66,13 @@ impl BtdtTestServer {
             target_dir.to_str().unwrap(),
             "--",
             "health-check",
-            base_url,
-        ]);
+        ];
+        if let Some(root_cert) = root_cert {
+            args.push("--root-cert");
+            args.push(root_cert);
+        }
+        args.push(base_url);
+        command.args(&args);
         command
             .spawn()
             .expect("failed to start btdt-server health-check")

@@ -23,6 +23,8 @@ tar = "0.4.43"
 url = "2.5.7"
 fs2 = "0.4.3"
 biscuit-auth = "6.0.0"
+rustls-webpki = "0.103.8"
+rustls-pki-types = "1.13.1"
 
 [dev-dependencies]
 criterion = "0.7.0"

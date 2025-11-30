@@ -1,13 +1,18 @@
 use crate::util::http::error::HttpClientError;
-use rustls::pki_types::ServerName;
+pub use rustls::RootCertStore;
+use rustls::pki_types::{CertificateDer, ServerName, TrustAnchor};
 use rustls::{ClientConfig, ClientConnection, StreamOwned, crypto};
+use rustls_pki_types::pem::PemObject;
 use rustls_platform_verifier::BuilderVerifierExt;
+use std::error::Error;
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::marker::PhantomData;
 use std::net::TcpStream;
+use std::path::Path;
 use std::sync::Arc;
 pub use url::Url;
+use webpki::anchor_from_trusted_cert;
 
 pub mod error;
 
@@ -71,6 +76,39 @@ impl HttpClient {
                 .with_platform_verifier()
                 .with_no_client_auth(),
         )))
+    }
+
+    pub fn with_tls_root_certs(
+        root_store: impl Into<Arc<RootCertStore>>,
+    ) -> std::result::Result<Self, rustls::Error> {
+        Ok(Self::new(Arc::new(
+            ClientConfig::builder_with_provider(Arc::new(crypto::aws_lc_rs::default_provider()))
+                .with_safe_default_protocol_versions()?
+                .with_root_certificates(root_store)
+                .with_no_client_auth(),
+        )))
+    }
+
+    pub fn with_tls_root_cert_paths(
+        root_cert_paths: &[impl AsRef<Path>],
+    ) -> std::result::Result<Self, rustls::Error> {
+        let root_cert_store = RootCertStore::from_iter(
+            root_cert_paths
+                .iter()
+                .map(|path| {
+                    Ok(anchor_from_trusted_cert(&CertificateDer::from_pem_file(path)?)?.to_owned())
+                })
+                .flat_map(
+                    |result: std::result::Result<TrustAnchor, Box<dyn Error>>| match result {
+                        Ok(cert) => Some(cert),
+                        Err(err) => {
+                            eprintln!("error {}", err);
+                            None
+                        }
+                    },
+                ),
+        );
+        Self::with_tls_root_certs(Arc::new(root_cert_store))
     }
 
     pub fn method(

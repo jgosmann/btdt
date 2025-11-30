@@ -2,6 +2,7 @@ use crate::app::Options;
 use crate::config::{BtdtServerConfig, CleanupConfig};
 use crate::storage::StorageHandle;
 use biscuit_auth::KeyPair;
+use biscuit_auth::format::schema::proof;
 use btdt::cache::cache_dispatcher::CacheDispatcher;
 use btdt::error::IoPathResult;
 use btdt::util::http::{HttpClient, Url};
@@ -21,6 +22,7 @@ use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{JoinHandle, park_timeout};
@@ -188,7 +190,13 @@ struct CliOpts {
 #[derive(Subcommand)]
 enum Commands {
     // Check health of a remote btdt-server instance.
-    HealthCheck { base_url: Url },
+    HealthCheck {
+        base_url: Url,
+
+        /// Root certificates (in PEM format) to trust (instead of system's root certificates).
+        #[arg(long)]
+        root_cert: Vec<PathBuf>,
+    },
     // Start the btdt-server.
     Start {},
 }
@@ -197,8 +205,15 @@ enum Commands {
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli_opts = CliOpts::parse();
     match cli_opts.command {
-        Some(Commands::HealthCheck { base_url }) => {
-            let client = HttpClient::default()?;
+        Some(Commands::HealthCheck {
+            base_url,
+            root_cert,
+        }) => {
+            let client = if root_cert.is_empty() {
+                HttpClient::default()
+            } else {
+                HttpClient::with_tls_root_cert_paths(&root_cert)
+            }?;
             let health_url = base_url.join("/api/health")?;
             let (status, resp) = client.get(&health_url)?.no_body()?.read_status()?;
             if status.is_success() {
