@@ -330,28 +330,33 @@ impl CleanupTask {
     pub fn run(mut self) -> CleanupTaskHandle {
         let is_aborted_rx = Arc::new(AtomicBool::new(false));
         let is_aborted_tx = is_aborted_rx.clone();
-        let join_handle = thread::spawn(move || {
-            let mut parked_since = Instant::now();
-            loop {
-                if let Some(timeout_remaining) =
-                    self.cleanup_interval.checked_sub(parked_since.elapsed())
-                {
-                    park_timeout(timeout_remaining);
-                }
-                if is_aborted_rx.load(Ordering::Acquire) {
-                    break;
-                }
-                if parked_since.elapsed() < self.cleanup_interval {
-                    continue;
-                }
-                for cache in self.caches.values_mut() {
-                    if let Err(e) = cache.clean_cache(self.cache_expiration, self.max_cache_size) {
-                        eprintln!("Error during periodic cleanup: {e}");
+        let join_handle = thread::Builder::new()
+            .name("cleanup".to_string())
+            .spawn(move || {
+                let mut parked_since = Instant::now();
+                loop {
+                    if let Some(timeout_remaining) =
+                        self.cleanup_interval.checked_sub(parked_since.elapsed())
+                    {
+                        park_timeout(timeout_remaining);
                     }
+                    if is_aborted_rx.load(Ordering::Acquire) {
+                        break;
+                    }
+                    if parked_since.elapsed() < self.cleanup_interval {
+                        continue;
+                    }
+                    for cache in self.caches.values_mut() {
+                        if let Err(e) =
+                            cache.clean_cache(self.cache_expiration, self.max_cache_size)
+                        {
+                            eprintln!("Error during periodic cleanup: {e}");
+                        }
+                    }
+                    parked_since = Instant::now();
                 }
-                parked_since = Instant::now();
-            }
-        });
+            })
+            .expect("Unable to spawn cleanup thread");
         CleanupTaskHandle {
             is_aborted: is_aborted_tx,
             join_handle,
