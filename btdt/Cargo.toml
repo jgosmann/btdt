@@ -29,6 +29,9 @@ criterion = "0.7.0"
 rand_xoshiro = "0.7.0"
 tempfile = "3.15.0"
 
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
+
 [[bench]]
 name = "io"
 harness = false

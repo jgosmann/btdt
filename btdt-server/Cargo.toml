@@ -46,6 +46,9 @@ rand_xoshiro = "0.7.0"
 serial_test = "3.2.0"
 tokio-stream = "0.1.17"
 
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
+
 [[bench]]
 name = "asyncio"
 harness = false

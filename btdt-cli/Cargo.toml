@@ -32,3 +32,6 @@ btdt-server = { path = "../btdt-server", features = ["test"] }
 rand = { version = "0.9.0", features = ["std_rng"] }
 tempfile = "3.15.0"
 trycmd = "0.15.8"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
