@@ -3,6 +3,7 @@ use biscuit_auth::{KeyPair, UnverifiedBiscuit};
 use btdt::cache::remote::RemoteCache;
 use btdt::cache::remote::http::HttpClient;
 use btdt::pipeline::Pipeline;
+use btdt::util::http::Url;
 use btdt_server_lib::test_server::BtdtTestServer;
 use serial_test::serial;
 use std::collections::BTreeMap;
@@ -11,6 +12,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
+use std::process::Command;
 use std::thread::sleep;
 use std::time::Duration;
 use tempfile::tempdir;
@@ -97,6 +99,21 @@ fn test_health_endpoint() {
         "unexpected status: {}",
         response.status()
     );
+}
+
+#[test]
+#[serial]
+fn test_health_check_fails_without_running_server() {
+    let mut process = BtdtTestServer::run_health_check("http://example.invalid");
+    assert!(!process.wait().unwrap().success());
+}
+
+#[test]
+#[serial]
+fn test_health_check_succeeds_with_running_server() {
+    let server = BtdtTestServer::default().wait_until_ready().unwrap();
+    let mut process = BtdtTestServer::run_health_check(server.base_url().as_str());
+    assert!(process.wait().unwrap().success());
 }
 
 #[test]

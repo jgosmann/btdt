@@ -1,4 +1,4 @@
-use crate::cache::remote::error::HttpClientError;
+use crate::util::http::error::HttpClientError;
 use rustls::pki_types::ServerName;
 use rustls::{ClientConfig, ClientConnection, StreamOwned, crypto};
 use rustls_platform_verifier::BuilderVerifierExt;
@@ -7,7 +7,9 @@ use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::marker::PhantomData;
 use std::net::TcpStream;
 use std::sync::Arc;
-use url::Url;
+pub use url::Url;
+
+pub mod error;
 
 const CRLF: &[u8] = b"\r\n";
 const HTTP_VERSION: &str = "HTTP/1.1";

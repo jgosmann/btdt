@@ -27,6 +27,52 @@ impl Default for BtdtTestServer {
 }
 
 impl BtdtTestServer {
+    fn target_dir() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target-test")
+    }
+
+    pub fn build() {
+        let mut build_command = Command::new("cargo");
+        build_command.args(&[
+            "build",
+            "--profile",
+            "test",
+            "--package",
+            "btdt-server",
+            "--bin",
+            "btdt-server",
+            "--target-dir",
+            Self::target_dir().to_str().unwrap(),
+        ]);
+        let mut process = build_command.spawn().expect("failed to build btdt-server");
+        if !process.wait().unwrap().success() {
+            panic!("failed to build btdt-server");
+        }
+    }
+
+    pub fn run_health_check(base_url: &str) -> Child {
+        Self::build();
+        let target_dir = Self::target_dir();
+        let mut command = Command::new("cargo");
+        command.args(&[
+            "run",
+            "--profile",
+            "test",
+            "--package",
+            "btdt-server",
+            "--bin",
+            "btdt-server",
+            "--target-dir",
+            target_dir.to_str().unwrap(),
+            "--",
+            "health-check",
+            base_url,
+        ]);
+        command
+            .spawn()
+            .expect("failed to start btdt-server health-check")
+    }
+
     pub fn new(env: &BTreeMap<String, String>) -> Self {
         let config_file = tempfile::Builder::new().suffix(".toml").tempfile().unwrap();
         fs::write(
@@ -38,24 +84,9 @@ impl BtdtTestServer {
         )
         .unwrap();
 
-        let target_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target-test");
-        let mut build_command = Command::new("cargo");
-        build_command.args(&[
-            "build",
-            "--profile",
-            "test",
-            "--package",
-            "btdt-server",
-            "--bin",
-            "btdt-server",
-            "--target-dir",
-            target_dir.to_str().unwrap(),
-        ]);
-        let mut process = build_command.spawn().expect("failed to build btdt-server");
-        if !process.wait().unwrap().success() {
-            panic!("failed to build btdt-server");
-        }
+        Self::build();
 
+        let target_dir = Self::target_dir();
         static BIND_ADDR: &str = "127.0.0.1:8707";
         let mut command = Command::new("cargo");
         command.args(&[

@@ -25,6 +25,7 @@ pub mod util {
     pub(crate) mod clock;
     pub mod close;
     pub(crate) mod encoding;
+    pub mod http;
     pub mod humanbytes;
 }
 pub mod test_util {

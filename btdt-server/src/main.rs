@@ -4,8 +4,10 @@ use crate::storage::StorageHandle;
 use biscuit_auth::KeyPair;
 use btdt::cache::cache_dispatcher::CacheDispatcher;
 use btdt::error::IoPathResult;
+use btdt::util::http::{HttpClient, Url};
 use btdt::util::humanbytes;
 use chrono::{Local, TimeDelta};
+use clap::{Parser, Subcommand};
 use data_encoding::BASE64;
 use poem::listener::{BoxListener, Listener, NativeTlsConfig};
 use poem::{
@@ -23,7 +25,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 use std::time::Duration;
-use std::{fs, thread};
+use std::{env, fs, thread};
 use tokio::select;
 use tokio::signal::unix::SignalKind;
 use zeroize::Zeroizing;
@@ -174,8 +176,55 @@ fn load_or_create_auth_keys(private_key_path: &str) -> Result<KeyPair, Box<dyn E
     }
 }
 
+/// btdt-server - cache server for btdt "been there, done that"
+#[derive(Parser)]
+#[command(version)]
+struct CliOpts {
+    /// Subcommand to run.
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    // Check health of a remote btdt-server instance.
+    HealthCheck { base_url: Url },
+    // Start the btdt-server.
+    Start {},
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let cli_opts = CliOpts::parse();
+    match cli_opts.command {
+        Some(Commands::HealthCheck { base_url }) => {
+            let client = HttpClient::default()?;
+            let health_url = base_url.join("/api/health")?;
+            let (status, resp) = client.get(&health_url)?.no_body()?.read_status()?;
+            if status.is_success() {
+                println!("Server is healthy.");
+                Ok(())
+            } else {
+                let body = resp
+                    .read_body()
+                    .and_then(|mut reader| {
+                        let mut buf = String::new();
+                        reader.read_to_string(&mut buf)?;
+                        Ok(buf)
+                    })
+                    .unwrap_or_else(|err| err.to_string());
+                Err(format!(
+                    "Server health check failed with status: {}\n{body}",
+                    status.code(),
+                )
+                .into())
+            }
+        }
+        Some(Commands::Start {}) | None => run_server().await,
+    }
+}
+
+async fn run_server() -> Result<(), Box<dyn Error>> {
     println!("{} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
 
     let settings = BtdtServerConfig::load()?;

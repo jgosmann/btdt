@@ -1,16 +1,14 @@
-mod error;
-pub mod http;
-
-use crate::cache::remote::http::{
-    AwaitingRequestBody, AwaitingRequestHeaders, ChunkedTransferEncoding, HttpClient, HttpRequest,
-    HttpResponse, OptionTransferEncoding, ReadResponseBody,
-};
 use crate::cache::{Cache, CacheHit};
 use crate::error::{IoPathError, IoPathResult, WithPath};
 use crate::util::close::Close;
+pub use crate::util::http;
+use crate::util::http::error::HttpClientError;
+use crate::util::http::{
+    AwaitingRequestBody, AwaitingRequestHeaders, ChunkedTransferEncoding, HttpClient, HttpRequest,
+    HttpResponse, OptionTransferEncoding, ReadResponseBody,
+};
 use biscuit_auth::UnverifiedBiscuit;
 use biscuit_auth::macros::block;
-use error::HttpClientError;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io;
