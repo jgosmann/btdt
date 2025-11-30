@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3](https://github.com/jgosmann/btdt/compare/btdt-cli-v0.3.2...btdt-cli-v0.3.3) - 2025-11-30
+
+### Added
+
+- Add `--root-cert` flag to specify custom TLS root certificates
+- Implement background cleanup job in btdt-server
+- Implement btdt-server health-check command
+
+### Other
+
+- Deny unsafe code without safety comment
+
 ## [0.3.2](https://github.com/jgosmann/btdt/compare/btdt-cli-v0.3.1...btdt-cli-v0.3.2) - 2025-11-18
 
 ### Other
