@@ -17,6 +17,7 @@ COPY --from=builder /tmp/rootfs/lib /lib
 COPY --from=builder /app/target/release/btdt-server /btdt-server
 ENV BTDT_AUTH_PRIVATE_KEY=/auth_private_key.pem
 ENV BTDT_SERVER_CONFIG_FILE=/config.toml
+ENV BTDT_HEALTHCHECK_ARGS=''
 EXPOSE 8707
-HEALTHCHECK CMD /btdt-server health-check http://localhost:8707/api/health || exit 1
+HEALTHCHECK CMD /btdt-server health-check $BTDT_HEALTHCHECK_ARGS http://localhost:8707/api/health || exit 1
 ENTRYPOINT ["/btdt-server"]
