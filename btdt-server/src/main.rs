@@ -23,8 +23,8 @@ use std::io::{Read, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread::JoinHandle;
-use std::time::Duration;
+use std::thread::{JoinHandle, park_timeout};
+use std::time::{Duration, Instant};
 use std::{env, fs, thread};
 use tokio::select;
 use tokio::signal::unix::SignalKind;
@@ -331,13 +331,25 @@ impl CleanupTask {
         let is_aborted_rx = Arc::new(AtomicBool::new(false));
         let is_aborted_tx = is_aborted_rx.clone();
         let join_handle = thread::spawn(move || {
-            while !is_aborted_rx.load(Ordering::Relaxed) {
-                thread::sleep(self.cleanup_interval);
+            let mut parked_since = Instant::now();
+            loop {
+                if let Some(timeout_remaining) =
+                    self.cleanup_interval.checked_sub(parked_since.elapsed())
+                {
+                    park_timeout(timeout_remaining);
+                }
+                if is_aborted_rx.load(Ordering::Acquire) {
+                    break;
+                }
+                if parked_since.elapsed() < self.cleanup_interval {
+                    continue;
+                }
                 for cache in self.caches.values_mut() {
                     if let Err(e) = cache.clean_cache(self.cache_expiration, self.max_cache_size) {
                         eprintln!("Error during periodic cleanup: {e}");
                     }
                 }
+                parked_since = Instant::now();
             }
         });
         CleanupTaskHandle {
@@ -377,7 +389,8 @@ struct CleanupTaskHandle {
 
 impl CleanupTaskHandle {
     fn abort(&self) {
-        self.is_aborted.store(true, Ordering::Relaxed);
+        self.is_aborted.store(true, Ordering::Release);
+        self.join_handle.thread().unpark();
     }
 
     fn join(self) -> Result<(), Box<dyn std::any::Any + Send>> {
