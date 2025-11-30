@@ -57,6 +57,9 @@ jobs:
           echo "component=${COMPONENT}" >> $GITHUB_OUTPUT
           echo "binary_name=${COMPONENT/btdt-cli/btdt}" >> $GITHUB_OUTPUT
           echo "version=${VERSION#v}" >> $GITHUB_OUTPUT
+      - name: Install musl-tools
+        run: sudo apt install musl-tools
+        if: ${{ !contains(matrix.os, 'macos') }}
       - uses: actions/checkout@v4
         if: ${{ !contains(matrix.skip-for, steps.version-info.outputs.component) }}
       - uses: taiki-e/upload-rust-binary-action@v1
