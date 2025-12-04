@@ -20,5 +20,5 @@ ENV BTDT_SERVER_CONFIG_FILE=/config.toml
 ENV BTDT_HEALTHCHECK_ARGS=''
 EXPOSE 8707
 HEALTHCHECK --start-period=5s --start-interval=1s \
-  CMD /btdt-server health-check $BTDT_HEALTHCHECK_ARGS http://localhost:8707/api/health
+  CMD ["/btdt-server", "health-check", "http://localhost:8707/api/health"]
 ENTRYPOINT ["/btdt-server"]
