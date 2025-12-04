@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5](https://github.com/jgosmann/btdt/compare/btdt-server-v0.3.4...btdt-server-v0.3.5) - 2025-12-04
+
+### Other
+
+- Allow to start health-check without `--root-cert`
+- Allow to set trusted root cert for health check via environment variable
+
 ## [0.3.4](https://github.com/jgosmann/btdt/compare/btdt-cli-v0.3.3...btdt-cli-v0.3.4) - 2025-12-02
 
 ### Other
