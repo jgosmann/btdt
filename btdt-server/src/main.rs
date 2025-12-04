@@ -194,7 +194,7 @@ enum Commands {
 
         /// Root certificates (in PEM format) to trust (instead of system's root certificates).
         #[arg(long, env = "BTDT_TRUSTED_ROOT_CERTS", value_delimiter = ',')]
-        root_cert: Vec<PathBuf>,
+        root_cert: Vec<Option<String>>,
     },
     // Start the btdt-server.
     Start {},
@@ -211,7 +211,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let client = if root_cert.is_empty() {
                 HttpClient::default()
             } else {
-                HttpClient::with_tls_root_cert_paths(&root_cert)
+                HttpClient::with_tls_root_cert_paths(
+                    &root_cert
+                        .into_iter()
+                        .flat_map(|cert| cert.map(PathBuf::from))
+                        .collect::<Vec<_>>(),
+                )
             }?;
             let health_url = base_url.join("/api/health")?;
             let (status, resp) = client.get(&health_url)?.no_body()?.read_status()?;
