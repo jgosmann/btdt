@@ -21,7 +21,7 @@ path = "lib/lib.rs"
 [dependencies]
 btdt = { path = "../btdt", version = "0.3.4" }
 bytes = "1.10.1"
-clap = { version = "4.5.53", features = ["derive"] }
+clap = { version = "4.5.53", features = ["derive", "env"] }
 config = { version = "0.15.13", features = ["toml"] }
 futures-core = "0.3.31"
 humantime = "2.1.0"

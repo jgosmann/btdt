@@ -193,7 +193,7 @@ enum Commands {
         base_url: Url,
 
         /// Root certificates (in PEM format) to trust (instead of system's root certificates).
-        #[arg(long)]
+        #[arg(long, env = "BTDT_TRUSTED_ROOT_CERTS", value_delimiter = ',')]
         root_cert: Vec<PathBuf>,
     },
     // Start the btdt-server.
