@@ -113,7 +113,6 @@ impl BtdtTestServer {
             "--target-dir",
             target_dir.to_str().unwrap(),
         ]);
-        command.env("CARGO_TARGET_DIR", "foo");
         command.env("BTDT_BIND_ADDRS", BIND_ADDR);
         command.env("BTDT_SERVER_CONFIG_FILE", config_file.path());
         for (key, value) in env {
