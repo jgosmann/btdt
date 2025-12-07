@@ -102,7 +102,7 @@ impl HttpClient {
                     |result: std::result::Result<TrustAnchor, Box<dyn Error>>| match result {
                         Ok(cert) => Some(cert),
                         Err(err) => {
-                            eprintln!("error {}", err);
+                            eprintln!("error {err}");
                             None
                         }
                     },
