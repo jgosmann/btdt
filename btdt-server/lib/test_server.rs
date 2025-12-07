@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use std::process::{Child, Command, ExitStatus};
+use std::sync::Once;
 use std::time::{Duration, Instant};
 use std::{env, fs, io};
 use tempfile::{NamedTempFile, TempDir, tempdir};
@@ -24,6 +25,8 @@ pub struct BtdtTestServer {
     client: Client,
     base_url: Url,
 }
+
+static BUILD_SERVER: Once = Once::new();
 
 impl Default for BtdtTestServer {
     fn default() -> Self {
@@ -58,7 +61,6 @@ impl BtdtTestServer {
 
     /// Run the btdt-server health-check command.
     pub fn run_health_check(base_url: &str, root_cert: Option<&str>) -> Child {
-        Self::build();
         let target_dir = Self::target_dir();
         let mut command = Command::new("cargo");
         let mut args = vec![
@@ -87,6 +89,10 @@ impl BtdtTestServer {
 
     /// Create and start a new btdt-server test instance.
     pub fn new(env: &BTreeMap<String, String>) -> Self {
+        BUILD_SERVER.call_once(|| {
+            Self::build();
+        });
+
         let config_file = tempfile::Builder::new().suffix(".toml").tempfile().unwrap();
         fs::write(
             config_file.path(),
@@ -96,8 +102,6 @@ impl BtdtTestServer {
         ",
         )
         .unwrap();
-
-        Self::build();
 
         let target_dir = Self::target_dir();
         static BIND_ADDR: &str = "127.0.0.1:8707";
