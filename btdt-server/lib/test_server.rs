@@ -61,21 +61,8 @@ impl BtdtTestServer {
 
     /// Run the btdt-server health-check command.
     pub fn run_health_check(base_url: &str, root_cert: Option<&str>) -> Child {
-        let target_dir = Self::target_dir();
-        let mut command = Command::new("cargo");
-        let mut args = vec![
-            "run",
-            "--profile",
-            "test",
-            "--package",
-            "btdt-server",
-            "--bin",
-            "btdt-server",
-            "--target-dir",
-            target_dir.to_str().unwrap(),
-            "--",
-            "health-check",
-        ];
+        let mut command = Command::new(Self::target_dir().join("debug/btdt-server"));
+        let mut args = vec!["health-check"];
         if let Some(root_cert) = root_cert {
             args.push("--root-cert");
             args.push(root_cert);
@@ -103,20 +90,8 @@ impl BtdtTestServer {
         )
         .unwrap();
 
-        let target_dir = Self::target_dir();
         static BIND_ADDR: &str = "127.0.0.1:8707";
-        let mut command = Command::new("cargo");
-        command.args(&[
-            "run",
-            "--profile",
-            "test",
-            "--package",
-            "btdt-server",
-            "--bin",
-            "btdt-server",
-            "--target-dir",
-            target_dir.to_str().unwrap(),
-        ]);
+        let mut command = Command::new(Self::target_dir().join("debug/btdt-server"));
         command.env("BTDT_BIND_ADDRS", BIND_ADDR);
         command.env("BTDT_SERVER_CONFIG_FILE", config_file.path());
         for (key, value) in env {
