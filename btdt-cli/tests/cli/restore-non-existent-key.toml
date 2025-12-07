@@ -1,6 +1,6 @@
 bin.name = "btdt"
 args = "restore --cache ./cache --success-rc-on-any-key --keys non-existent-key dest"
-status.code = 2
+status.code = 4
 stderr = """
 Keys not found in cache.
 """

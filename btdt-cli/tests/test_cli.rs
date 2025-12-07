@@ -236,7 +236,7 @@ fn test_remote_with_custom_tls_root_cert() {
         .unwrap();
     assert_eq!(
         output.status.code(),
-        Some(2),
+        Some(4),
         "unexpected return code: {}",
         String::from_utf8_lossy(&output.stderr)
     );

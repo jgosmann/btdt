@@ -67,9 +67,10 @@ enum Commands {
     /// # Exit codes:
     ///
     /// - 0: Files were restored from the primary (i.e. first listed) cache key.
-    /// - 1: Error in command invocation.
-    /// - 2: No keys were found in the cache.
+    /// - 1: General error
+    /// - 2: Error in command invocation.
     /// - 3: Files were restored from a non-primary cache key.
+    /// - 4: No keys were found in the cache.
     Restore {
         #[command(flatten)]
         entries_ref: CacheEntriesRef,
@@ -257,7 +258,7 @@ fn main() -> Result<ExitCode, anyhow::Error> {
                 }
             } else {
                 eprintln!("Keys not found in cache.");
-                return Ok(ExitCode::from(2));
+                return Ok(ExitCode::from(4));
             }
         }
     }
