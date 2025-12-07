@@ -1,3 +1,5 @@
+//! Helpers for dealing with asynchronous I/O that should be available for benchmarks.
+
 use bytes::BytesMut;
 use futures_core::Stream;
 use std::io;
@@ -8,11 +10,13 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
 use tokio::task::spawn_blocking;
 
+/// An adapter to convert a blocking `Read` into an async `Stream` of `Bytes`.
 pub struct StreamAdapter {
     rx: Receiver<io::Result<bytes::Bytes>>,
 }
 
 impl StreamAdapter {
+    /// Creates a new `StreamAdapter` from a blocking `Read` implementor.
     pub fn new<R: Read + Send + 'static>(mut reader: R, size_hint: Option<u64>) -> Self {
         let (tx, rx) = mpsc::channel(10);
         spawn_blocking(move || {

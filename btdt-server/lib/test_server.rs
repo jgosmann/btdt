@@ -1,3 +1,5 @@
+//! Test server utilities for btdt-server.
+
 use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::{Certificate, Url};
 use std::collections::BTreeMap;
@@ -8,10 +10,13 @@ use std::time::{Duration, Instant};
 use std::{env, fs, io};
 use tempfile::{NamedTempFile, TempDir, tempdir};
 
+/// TLS leaf certificate and key for testing purposes.
 #[allow(unused)]
 pub static CERTIFICATE_PKCS12: &[u8] = include_bytes!("../../tls/leaf.p12");
+/// TLS CA certificate for testing purposes.
 pub static CERTIFICATE_PEM: &[u8] = include_bytes!("../../tls/ca.pem");
 
+/// A test server instance for btdt-server.
 pub struct BtdtTestServer {
     _config_file: NamedTempFile,
     _private_key_dir: Option<TempDir>,
@@ -31,6 +36,7 @@ impl BtdtTestServer {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target-test")
     }
 
+    /// Build the btdt-server binary in test profile.
     pub fn build() {
         let mut build_command = Command::new("cargo");
         build_command.args(&[
@@ -50,6 +56,7 @@ impl BtdtTestServer {
         }
     }
 
+    /// Run the btdt-server health-check command.
     pub fn run_health_check(base_url: &str, root_cert: Option<&str>) -> Child {
         Self::build();
         let target_dir = Self::target_dir();
@@ -78,6 +85,7 @@ impl BtdtTestServer {
             .expect("failed to start btdt-server health-check")
     }
 
+    /// Create and start a new btdt-server test instance.
     pub fn new(env: &BTreeMap<String, String>) -> Self {
         let config_file = tempfile::Builder::new().suffix(".toml").tempfile().unwrap();
         fs::write(
@@ -152,21 +160,25 @@ impl Drop for BtdtTestServer {
 }
 
 impl BtdtTestServer {
+    /// Get the base URL of the test server.
     pub fn base_url(&self) -> &Url {
         &self.base_url
     }
 
+    /// Create a GET request to the specified path.
     pub fn get(&self, path: &str) -> RequestBuilder {
         let url = self.base_url.join(path).expect("Invalid path");
         self.client.get(url)
     }
 
+    /// Check if the server is ready by querying the health endpoint.
     pub fn is_ready(&self) -> bool {
         self.get("/api/health")
             .send()
             .map_or(false, |r| r.error_for_status().is_ok())
     }
 
+    /// Wait until the server is ready or timeout after 5 seconds.
     pub fn wait_until_ready(self) -> Result<Self, WaitTimeout> {
         let start = Instant::now();
         while start.elapsed() < Duration::from_secs(5) {
@@ -178,6 +190,7 @@ impl BtdtTestServer {
         Err(WaitTimeout)
     }
 
+    /// Wait for the server process to shut down, with a timeout of 60 seconds.
     pub fn wait_for_shutdown(mut self) -> Result<io::Result<ExitStatus>, WaitTimeout> {
         let start = Instant::now();
         while start.elapsed() < Duration::from_secs(60) {
@@ -189,6 +202,7 @@ impl BtdtTestServer {
     }
 }
 
+/// Error indicating that a wait operation has timed out.
 #[derive(Debug)]
 pub struct WaitTimeout;
 
