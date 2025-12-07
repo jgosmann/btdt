@@ -37,7 +37,7 @@ impl RemoteCache {
         let cache_id = base_url
             .path_segments()
             .ok_or(MissingCacheId)?
-            .last()
+            .next_back()
             .ok_or(MissingCacheId)?
             .to_string();
         Ok(RemoteCache {
