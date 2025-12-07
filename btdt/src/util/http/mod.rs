@@ -1,3 +1,29 @@
+//! A simple HTTP/1.1 client implementation with support for TLS using rustls.
+//!
+//! The client uses the type state pattern to enforce correct usage at compile time.
+//! It avoids storing the entire request or response in memory, allowing for streaming of large
+//! bodies.
+//!
+//! # Examples
+//!
+//! ```rust
+//! use btdt::util::http::{HttpClient, Url};
+//! use std::io::{Read, Write};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let url = Url::parse("https://www.example.com/")?;
+//! let mut request = HttpClient::default()?.get(&url)?;
+//! request.header("X-Foo", "bar")?;
+//! let response = request.no_body()?;
+//! let (status, mut response) = response.read_status()?;
+//! if status.is_success() {
+//!     let mut response_body = String::new();
+//!     response.read_body().unwrap().read_to_string(&mut response_body)?;
+//! }
+//! # Ok(())
+//! # }
+//! ```
+
 use crate::util::http::error::HttpClientError;
 pub use rustls::RootCertStore;
 use rustls::pki_types::{CertificateDer, ServerName, TrustAnchor};
@@ -25,15 +51,21 @@ enum TransferEncodingType {
     FixedSize(usize),
 }
 
+/// Marker trait for HTTP message states.
 pub trait State {}
+/// Marker type for the state of awaiting request headers.
 pub struct AwaitingRequestHeaders<T: OptionTransferEncoding> {
     _transfer_encoding: PhantomData<T>,
 }
+/// Marker type for the state of awaiting the request body.
 pub struct AwaitingRequestBody<T: TransferEncoding> {
     _transfer_encoding: PhantomData<T>,
 }
+/// Marker type for the state of reading the response status line.
 pub struct ReadResponseStatus;
+/// Marker type for the state of reading the response headers.
 pub struct ReadResponseHeaders;
+/// Marker type for the state of reading the response body.
 pub struct ReadResponseBody;
 impl<T: OptionTransferEncoding> State for AwaitingRequestHeaders<T> {}
 impl<T: TransferEncoding> State for AwaitingRequestBody<T> {}
@@ -41,16 +73,23 @@ impl State for ReadResponseStatus {}
 impl State for ReadResponseHeaders {}
 impl State for ReadResponseBody {}
 
+/// Marker trait for transfer encoding types.
 pub trait TransferEncoding {}
+/// Marker type for undefined transfer encoding because no body is included in the message.
 pub struct NoBodyTransferEncoding;
+/// Marker type for chunked transfer encoding.
 pub struct ChunkedTransferEncoding;
+/// Marker type for fixed-size transfer encoding.
 pub struct FixedSizeTransferEncoding;
 impl TransferEncoding for NoBodyTransferEncoding {}
 impl TransferEncoding for ChunkedTransferEncoding {}
 impl TransferEncoding for FixedSizeTransferEncoding {}
 
+/// Marker trait for optional transfer encoding types.
 pub trait OptionTransferEncoding {}
+/// Marker type for no defined transfer encoding.
 pub struct TNone;
+/// Marker type for some defined transfer encoding.
 pub struct TSome<T> {
     _type: PhantomData<T>,
 }
@@ -59,15 +98,20 @@ impl<T: TransferEncoding> OptionTransferEncoding for TSome<T> {}
 
 pub(crate) type Result<T> = std::result::Result<T, HttpClientError>;
 
+/// A simple HTTP/1.1 client with TLS support using rustls.
+///
+/// See the module documentation for usage examples.
 pub struct HttpClient {
     tls_client_config: Arc<ClientConfig>,
 }
 
 impl HttpClient {
+    /// Creates a new HTTP client with the given TLS client configuration.
     pub fn new(tls_client_config: Arc<ClientConfig>) -> Self {
         Self { tls_client_config }
     }
 
+    /// Creates a new HTTP client with the default TLS configuration.
     #[allow(clippy::should_implement_trait)]
     pub fn default() -> std::result::Result<Self, rustls::Error> {
         Ok(Self::new(Arc::new(
@@ -78,6 +122,7 @@ impl HttpClient {
         )))
     }
 
+    /// Creates a new HTTP client with the given root certificates for TLS.
     pub fn with_tls_root_certs(
         root_store: impl Into<Arc<RootCertStore>>,
     ) -> std::result::Result<Self, rustls::Error> {
@@ -89,6 +134,7 @@ impl HttpClient {
         )))
     }
 
+    /// Creates a new HTTP client with the given root certificate file paths for TLS.
     pub fn with_tls_root_cert_paths(
         root_cert_paths: &[impl AsRef<Path>],
     ) -> std::result::Result<Self, rustls::Error> {
@@ -111,6 +157,7 @@ impl HttpClient {
         Self::with_tls_root_certs(Arc::new(root_cert_store))
     }
 
+    /// Creates a new HTTP request with the given method and URL.
     pub fn method(
         &self,
         method: &str,
@@ -140,6 +187,7 @@ impl HttpClient {
         Ok(client)
     }
 
+    /// Creates a new HTTP GET request for the given URL.
     pub fn get(
         &self,
         url: &Url,
@@ -151,11 +199,13 @@ impl HttpClient {
         })
     }
 
+    /// Creates a new HTTP POST request for the given URL.
     #[allow(unused)]
     pub fn post(&self, url: &Url) -> Result<HttpRequest<AwaitingRequestHeaders<TNone>>> {
         self.method("POST", url)
     }
 
+    /// Creates a new HTTP PUT request for the given URL.
     pub fn put(&self, url: &Url) -> Result<HttpRequest<AwaitingRequestHeaders<TNone>>> {
         self.method("PUT", url)
     }
@@ -211,12 +261,14 @@ impl WriteThenRead for BufWriter<StreamOwned<ClientConnection, TcpStream>> {
     }
 }
 
+/// Represents an HTTP status line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpStatus {
     status_line: String,
 }
 
 impl HttpStatus {
+    /// Creates a new `HttpStatus` from the given status line.
     fn new(status_line: String) -> Result<HttpStatus> {
         if !status_line.starts_with(HTTP_VERSION) {
             return Err(HttpClientError::invalid_data("unsupported HTTP version"));
@@ -233,33 +285,40 @@ impl HttpStatus {
         Ok(status)
     }
 
+    /// Returns the status line as a string slice.
     pub fn as_str(&self) -> &str {
         &self.status_line
     }
 
+    /// Returns the HTTP status code as a string slice.
     pub fn code(&self) -> &str {
         &self.status_line[HTTP_VERSION.len() + 1..HTTP_VERSION.len() + 4]
     }
 
+    /// Returns the HTTP status code as a u16.
     pub fn code_u16(&self) -> u16 {
         self.code().parse().expect("invalid HTTP staus code")
     }
 
+    /// Returns true if the status code indicates success (2xx).
     pub fn is_success(&self) -> bool {
         self.code().as_bytes()[0] == b'2'
     }
 
+    /// Returns the reason phrase as a string slice.
     pub fn reason(&self) -> &str {
         self.status_line[HTTP_VERSION.len() + 5..].trim_end()
     }
 }
 
+/// An HTTP request in a specific state.
 pub struct HttpRequest<S: State> {
     stream: Box<dyn WriteThenRead + Send>,
     _state: PhantomData<S>,
 }
 
 impl<T: OptionTransferEncoding> HttpRequest<AwaitingRequestHeaders<T>> {
+    /// Adds a header to the HTTP request.
     pub fn header(&mut self, key: &str, value: &str) -> Result<()> {
         self.stream.write_all(key.as_bytes())?;
         self.stream.write_all(b": ")?;
@@ -268,6 +327,7 @@ impl<T: OptionTransferEncoding> HttpRequest<AwaitingRequestHeaders<T>> {
         Ok(())
     }
 
+    /// Finalizes the HTTP request without a body and sends it.
     pub fn no_body(mut self) -> Result<HttpResponse<ReadResponseStatus>> {
         self.stream.write_all(CRLF)?;
         Ok(HttpResponse {
@@ -277,6 +337,8 @@ impl<T: OptionTransferEncoding> HttpRequest<AwaitingRequestHeaders<T>> {
 }
 
 impl HttpRequest<AwaitingRequestHeaders<TNone>> {
+    /// Finalizes the HTTP request header section with fixed-size transfer encoding and awaits
+    /// the request body.
     #[allow(unused)]
     pub fn body_with_size(
         mut self,
@@ -290,6 +352,8 @@ impl HttpRequest<AwaitingRequestHeaders<TNone>> {
         })
     }
 
+    /// Finalizes the HTTP request header section with chunked transfer encoding and awaits the
+    /// request body.
     pub fn body(mut self) -> Result<HttpRequest<AwaitingRequestBody<ChunkedTransferEncoding>>> {
         self.header("Transfer-Encoding", "chunked")?;
         self.stream.write_all(CRLF)?;
@@ -329,6 +393,7 @@ impl Write for HttpRequest<AwaitingRequestBody<ChunkedTransferEncoding>> {
 }
 
 impl HttpRequest<AwaitingRequestBody<FixedSizeTransferEncoding>> {
+    /// Finalizes the HTTP request and sends it, returning the HTTP response.
     #[allow(unused)]
     pub fn response(self) -> Result<HttpResponse<ReadResponseStatus>> {
         Ok(HttpResponse {
@@ -338,6 +403,7 @@ impl HttpRequest<AwaitingRequestBody<FixedSizeTransferEncoding>> {
 }
 
 impl HttpRequest<AwaitingRequestBody<ChunkedTransferEncoding>> {
+    /// Finalizes the HTTP request and sends it, returning the HTTP response.
     pub fn response(mut self) -> Result<HttpResponse<ReadResponseStatus>> {
         self.stream.write_all(b"0")?;
         self.stream.write_all(CRLF)?;
@@ -348,6 +414,7 @@ impl HttpRequest<AwaitingRequestBody<ChunkedTransferEncoding>> {
     }
 }
 
+/// Represents an HTTP header.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Header {
     header_line: String,
@@ -357,6 +424,7 @@ pub struct Header {
 }
 
 impl Header {
+    /// Creates a new `Header` from the given header line.
     fn new(header_line: String) -> Result<Header> {
         let key_end = header_line.find(':').ok_or_else(|| {
             HttpClientError::invalid_data("malformed header: missing colon separator")
@@ -379,15 +447,20 @@ impl Header {
         })
     }
 
+    /// Returns the header key as a string slice.
     pub fn key(&self) -> &str {
         &self.header_line[..self.key_end]
     }
 
+    /// Returns the header value as a string slice.
     pub fn value(&self) -> &str {
         &self.header_line[self.value_start..self.value_end]
     }
 }
 
+/// An HTTP message reader in a specific state.
+///
+/// This allows, for example, reading the status line, headers, and body of an HTTP response.
 struct HttpMessageReader<R: BufRead, S: State> {
     reader: R,
     transfer_encoding: Option<TransferEncodingType>,
@@ -398,6 +471,7 @@ struct HttpMessageReader<R: BufRead, S: State> {
 }
 
 impl<R: BufRead, S: State> HttpMessageReader<R, S> {
+    /// Creates a new `HttpMessageReader` with the given underlying reader.
     pub fn new(reader: R) -> Self {
         Self {
             reader,
@@ -411,6 +485,7 @@ impl<R: BufRead, S: State> HttpMessageReader<R, S> {
 }
 
 impl<R: BufRead> HttpMessageReader<R, ReadResponseStatus> {
+    /// Reads the HTTP status line and returns the status along with a reader for the headers.
     pub fn read_status(
         mut self,
     ) -> Result<(HttpStatus, HttpMessageReader<R, ReadResponseHeaders>)> {
@@ -445,6 +520,9 @@ impl<R: BufRead> HttpMessageReader<R, ReadResponseHeaders> {
         }
     }
 
+    /// Reads the next HTTP header from the response.
+    ///
+    /// Returns `Ok(None)` if there are no more headers.
     pub fn read_next_header(&mut self) -> Result<Option<Header>> {
         if self.headers_exhausted {
             return Ok(None);
@@ -471,6 +549,7 @@ impl<R: BufRead> HttpMessageReader<R, ReadResponseHeaders> {
         Ok(Some(header))
     }
 
+    /// Finalizes the header reading and returns a reader for the response body.
     pub fn read_body(mut self) -> Result<HttpMessageReader<R, ReadResponseBody>> {
         while !self.headers_exhausted {
             self.read_next_header()?;
@@ -539,11 +618,13 @@ impl<R: BufRead> Read for HttpMessageReader<R, ReadResponseBody> {
     }
 }
 
+/// An HTTP response in a specific state.
 pub struct HttpResponse<S: State> {
     inner: HttpMessageReader<Box<dyn BufRead + Send>, S>,
 }
 
 impl HttpResponse<ReadResponseStatus> {
+    /// Reads the HTTP status line and returns the status along with a response reader for the headers.
     pub fn read_status(self) -> Result<(HttpStatus, HttpResponse<ReadResponseHeaders>)> {
         let (status, inner) = self.inner.read_status()?;
         Ok((status, HttpResponse { inner }))
@@ -551,10 +632,12 @@ impl HttpResponse<ReadResponseStatus> {
 }
 
 impl HttpResponse<ReadResponseHeaders> {
+    /// Reads the next HTTP header from the response.
     pub fn read_next_header(&mut self) -> Result<Option<Header>> {
         self.inner.read_next_header()
     }
 
+    /// Finalizes the header reading and returns a response reader for the body.
     pub fn read_body(self) -> Result<HttpResponse<ReadResponseBody>> {
         Ok(HttpResponse {
             inner: self.inner.read_body()?,

@@ -52,7 +52,6 @@ pub struct LocalCache<S: Storage, C: Clock = SystemClock, R: RngBytes = ThreadRn
 }
 impl<S: Storage> LocalCache<S, SystemClock, ThreadRng> {
     /// Creates a new local cache that stores data in the given storage backend.
-    ///
     pub fn new(storage: S) -> Self {
         Self::with_clock(storage, SystemClock)
     }

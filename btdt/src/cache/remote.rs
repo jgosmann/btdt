@@ -1,3 +1,5 @@
+//! Provides a remote cache implementation using HTTP.
+
 use crate::cache::{Cache, CacheHit};
 use crate::error::{IoPathError, IoPathResult, WithPath};
 use crate::util::close::Close;
@@ -16,6 +18,7 @@ use std::io::{ErrorKind, Write};
 use std::time::{Duration, SystemTime};
 use url::Url;
 
+/// A remote cache that stores data via the btdt HTTP API.
 pub struct RemoteCache {
     base_url: Url,
     cache_id: String,
@@ -24,6 +27,7 @@ pub struct RemoteCache {
 }
 
 impl RemoteCache {
+    /// Creates a new remote cache with the given base URL, cache ID, HTTP client, and authentication token.
     pub fn new(
         base_url: &Url,
         cache_id: impl Into<String>,
@@ -44,11 +48,17 @@ impl RemoteCache {
     }
 }
 
+/// An error that can occur when using the remote cache.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum RemoteCacheError {
+    /// The provided cache ID is invalid.
     InvalidCacheId(String, url::ParseError),
-    HttpError { status: u16 },
+    /// An HTTP error occurred.
+    HttpError {
+        /// The HTTP status code.
+        status: u16,
+    },
 }
 
 impl Display for RemoteCacheError {
@@ -69,6 +79,7 @@ impl Error for RemoteCacheError {
     }
 }
 
+/// A cache writer writing ot the remote cache.
 pub struct RemoteWriter(HttpRequest<AwaitingRequestBody<ChunkedTransferEncoding>>);
 
 impl Write for RemoteWriter {

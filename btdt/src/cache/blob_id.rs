@@ -9,12 +9,15 @@ pub const BLOB_ID_SIZE: usize = 16;
 /// A unique identifier for a blob in the cache.
 pub type BlobId = [u8; BLOB_ID_SIZE];
 
-/// Trait for providing a random bytes.
+/// Trait for providing random bytes.
 pub trait RngBytes {
-    /// Returns a new random number generator.
+    /// Fills the given buffer with random bytes.
     fn fill_bytes(&self, buf: &mut [u8]);
 }
 
+/// A thread-safe random number generator.
+///
+/// This wraps a random number generator in a [RwLock] to allow concurrent access.
 pub struct SharedRng<R: CryptoRng + RngCore>(RwLock<R>);
 
 impl<R: CryptoRng + RngCore> SharedRng<R> {
@@ -29,6 +32,7 @@ impl<R: CryptoRng + RngCore> RngBytes for SharedRng<R> {
     }
 }
 
+/// A random number generator that uses the thread-local RNG.
 pub struct ThreadRng;
 
 impl RngBytes for ThreadRng {

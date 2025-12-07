@@ -1,10 +1,14 @@
+//! Utility functions for file system operations in tests.
+
 use rand::RngCore;
 use std::fs::File;
 use std::io;
 use std::io::Write;
 use std::path::Path;
 
+/// Extension trait for creating files filled with random data.
 pub trait CreateFilled {
+    /// Creates a new file at the given path, filled with random data of the given size.
     fn create_filled(path: &Path, size: usize, rng: &mut impl RngCore) -> io::Result<File>;
 }
 

@@ -1,11 +1,18 @@
+//! A utility module for parsing human-readable byte size strings into their corresponding
+//! byte values.
+
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::num::ParseIntError;
 
+/// An error that can occur while parsing a human-readable byte size string.
 #[derive(Debug)]
 pub enum ParserError {
+    /// An error that occurred while parsing an integer value.
     ParseIntError(ParseIntError),
+    /// An invalid unit prefix was encountered.
     InvalidUnitPrefix(String),
+    /// The input string consists only of whitespace.
     OnlyWhitespace,
 }
 
@@ -29,6 +36,7 @@ impl From<ParseIntError> for ParserError {
     }
 }
 
+/// Parses a human-readable byte size string into its corresponding byte value.
 pub fn parse_bytes_from_str(input: &str) -> Result<u64, ParserError> {
     let input = input.trim();
     if input.is_empty() {

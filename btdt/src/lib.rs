@@ -1,14 +1,14 @@
-//! `btdt` is a tool for flexible caching files in CI pipelines.
+//! `btdt` is a tool for flexible caching of files in CI pipelines.
 //!
 //! You are reading the library API documentation. If you are not looking to integrate `btdt` into
-//! your own Rust project, but to use it your CI pipelines, you probably want to read the
-//! [user guide](https://jgosmann.github.io/btdt/).
+//! your own Rust project, but to use it in your CI pipelines, you probably want to read the
+//! [user guide](https://jgosmann.github.io/btdt/) instead.
 //!
 //! `btdt` makes use of three main concepts:
 //!
 //! - **Storage**: A [storage] is a place where files are stored, for example the local filesystem.
 //! - **Cache**: A [cache] manages keys and associated data, and might use a storage to store that
-//!   data. It can also take care of cleaning old entry based on age or cache size.
+//!   data. It can also take care of cleaning old entries based on age or cache size.
 //! - **Pipeline**: A [pipeline] defines how multiple files a processed to be stored in the cache,
 //!   e.g. by archiving them in TAR format and potentially compressing them.
 //!

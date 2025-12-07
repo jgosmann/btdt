@@ -1,3 +1,5 @@
+//! A cache dispatcher to dispatch to different cache implementations.
+
 use crate::cache::local::LocalCache;
 use crate::cache::remote::RemoteCache;
 use crate::cache::{Cache, CacheHit};
@@ -8,9 +10,13 @@ use crate::util::close::Close;
 use std::io;
 use std::io::{Read, Write};
 
+/// A cache dispatcher allows to dispatch to different cache implementations using a common type.
 pub enum CacheDispatcher {
+    /// Dispatches to a local cache with in-memory storage.
     InMemory(LocalCache<InMemoryStorage>),
+    /// Dispatches to a local cache with filesystem storage.
     Filesystem(LocalCache<FilesystemStorage>),
+    /// Dispatches to a remote cache.
     Remote(Box<RemoteCache>),
 }
 
@@ -65,6 +71,7 @@ impl Cache for CacheDispatcher {
     }
 }
 
+/// Writer returned by the [CacheDispatcher].
 pub enum CacheWriter {
     InMemory(<LocalCache<InMemoryStorage> as Cache>::Writer),
     Filesystem(<LocalCache<FilesystemStorage> as Cache>::Writer),

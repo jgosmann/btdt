@@ -1,14 +1,23 @@
+//! Error types for HTTP client operations.
+
 use rustls::pki_types::InvalidDnsNameError;
 use std::fmt::{Display, Formatter};
 use std::io;
 
+/// An error that can occur during HTTP client operations.
 #[derive(Debug)]
 pub enum HttpClientError {
+    /// An invalid URL scheme was encountered.
     InvalidScheme(String),
+    /// An invalid DNS name was encountered.
     InvalidDnsName(String),
+    /// The URL is missing a host.
     MissingHost,
+    /// An unsupported feature was requested.
     UnsupportedFeature(&'static str),
+    /// An I/O error occurred.
     IoError(io::Error),
+    /// A TLS error occurred.
     TlsError(rustls::Error),
 }
 
