@@ -173,7 +173,7 @@ fn load_or_create_auth_keys(private_key_path: &str) -> Result<KeyPair, Box<dyn E
         keyfile
             .read_to_string(&mut key_pem)
             .map_err(humanize_auth_key_error)?;
-        Ok(KeyPair::from_private_key_pem(&key_pem)?)
+        Ok(KeyPair::from_private_key_pem(key_pem.trim())?)
     }
 }
 
