@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/jgosmann/btdt/compare/btdt-cli-v0.3.5...btdt-cli-v0.4.0) - 2025-12-07
+
+### Fixed
+
+- [**breaking**] Disambiguate exit codes
+
+### Other
+
+- [**breaking**] Use actual API url for remote cache specification
+- Fix clippy lint
+- Use module/mod.rs structure consistently
+- Update btdt API documentation
+- clippy lint
+
 ## [0.3.5](https://github.com/jgosmann/btdt/compare/btdt-server-v0.3.4...btdt-server-v0.3.5) - 2025-12-04
 
 ### Other
