@@ -144,13 +144,6 @@ impl CacheEntriesRef {
 impl CacheRef {
     fn to_cache(&self) -> Result<CacheDispatcher, anyhow::Error> {
         if self.cache.starts_with("http://") || self.cache.starts_with("https://") {
-            let mut split = self.cache.rsplitn(2, '/');
-            let cache_id = split
-                .next()
-                .expect("rsplit must return at least one element");
-            let base_url = split
-                .next()
-                .ok_or(anyhow!("Invalid remote cache URL: {}", self.cache))?;
             if let Some(auth_token_file) = &self.auth_token_file {
                 let auth_private_key_meta = fs::metadata(auth_token_file)
                     .with_context(|| format!("stat on {}", auth_token_file.display()))?;
@@ -174,8 +167,7 @@ impl CacheRef {
                     HttpClient::with_tls_root_cert_paths(&self.root_cert)
                 }?;
                 Ok(CacheDispatcher::Remote(Box::new(RemoteCache::new(
-                    &Url::parse(base_url)?,
-                    cache_id,
+                    Url::parse(&self.cache)?,
                     http_client,
                     token,
                 )?)))

@@ -53,8 +53,7 @@ impl BtdtTestServerWithAuthorizedClient {
 
         let client = Pipeline::new(
             RemoteCache::new(
-                server.base_url(),
-                "test-cache",
+                server.base_url().join("api/caches/test-cache").unwrap(),
                 HttpClient::default().unwrap(),
                 token,
             )

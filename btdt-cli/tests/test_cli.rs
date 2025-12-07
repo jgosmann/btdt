@@ -139,7 +139,7 @@ fn test_remote_roundtrip() {
     )]))
     .wait_until_ready()
     .unwrap();
-    let cache_url = server.base_url().join("test-cache").unwrap();
+    let cache_url = server.base_url().join("api/caches/test-cache").unwrap();
 
     let tempdir = tempdir().unwrap();
     let source_path = tempdir.path().join("source-root");
@@ -218,7 +218,7 @@ fn test_remote_with_custom_tls_root_cert() {
         ),
     ]);
     let server = BtdtTestServer::new(&env).wait_until_ready().unwrap();
-    let cache_url = server.base_url().join("test-cache").unwrap();
+    let cache_url = server.base_url().join("api/caches/test-cache").unwrap();
 
     let output_dir = tempdir().unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_btdt"))

@@ -1,5 +1,6 @@
 //! Provides a remote cache implementation using HTTP.
 
+use crate::cache::remote::RemoteCacheError::MissingCacheId;
 use crate::cache::{Cache, CacheHit};
 use crate::error::{IoPathError, IoPathResult, WithPath};
 use crate::util::close::Close;
@@ -27,20 +28,20 @@ pub struct RemoteCache {
 }
 
 impl RemoteCache {
-    /// Creates a new remote cache with the given base URL, cache ID, HTTP client, and authentication token.
+    /// Creates a new remote cache with the given base URL, HTTP client, and authentication token.
     pub fn new(
-        base_url: &Url,
-        cache_id: impl Into<String>,
+        base_url: Url,
         client: HttpClient,
         token: UnverifiedBiscuit,
     ) -> Result<Self, RemoteCacheError> {
-        let cache_id = cache_id.into();
+        let cache_id = base_url
+            .path_segments()
+            .ok_or(MissingCacheId)?
+            .last()
+            .ok_or(MissingCacheId)?
+            .to_string();
         Ok(RemoteCache {
-            base_url: base_url
-                .join("api/caches/")
-                .expect("failed to join API path")
-                .join(&cache_id)
-                .map_err(|err| RemoteCacheError::InvalidCacheId(cache_id.to_string(), err))?,
+            base_url,
             cache_id,
             client,
             token,
@@ -52,8 +53,8 @@ impl RemoteCache {
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum RemoteCacheError {
-    /// The provided cache ID is invalid.
-    InvalidCacheId(String, url::ParseError),
+    /// The provided URL does not contain a cache ID.
+    MissingCacheId,
     /// An HTTP error occurred.
     HttpError {
         /// The HTTP status code.
@@ -64,20 +65,13 @@ pub enum RemoteCacheError {
 impl Display for RemoteCacheError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidCacheId(cache_id, _) => write!(f, "Invalid cache id: {cache_id}"),
+            Self::MissingCacheId => write!(f, "missing cache ID in URL"),
             Self::HttpError { status } => write!(f, "http error: {status}"),
         }
     }
 }
 
-impl Error for RemoteCacheError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::InvalidCacheId(_, err) => Some(err),
-            Self::HttpError { .. } => None,
-        }
-    }
-}
+impl Error for RemoteCacheError {}
 
 /// A cache writer writing ot the remote cache.
 pub struct RemoteWriter(HttpRequest<AwaitingRequestBody<ChunkedTransferEncoding>>);
@@ -269,8 +263,7 @@ mod tests {
     fn test_get_returns_none_for_empty_keys() {
         let test_server = TestServer::start(EMPTY_RESPONSE.into()).unwrap();
         let cache = RemoteCache::new(
-            test_server.base_url(),
-            "cache-id",
+            test_server.base_url().join("api/caches/cache-id").unwrap(),
             HttpClient::default().unwrap(),
             auth_token(),
         )
@@ -283,8 +276,7 @@ mod tests {
         let test_server = TestServer::start(EMPTY_RESPONSE.into()).unwrap();
         let addr = test_server.addr();
         let cache = RemoteCache::new(
-            test_server.base_url(),
-            "cache-id",
+            test_server.base_url().join("api/caches/cache-id").unwrap(),
             HttpClient::default().unwrap(),
             auth_token(),
         )
@@ -318,8 +310,7 @@ mod tests {
         .unwrap();
         let addr = test_server.addr();
         let cache = RemoteCache::new(
-            test_server.base_url(),
-            "cache-id",
+            test_server.base_url().join("api/caches/cache-id").unwrap(),
             HttpClient::default().unwrap(),
             auth_token(),
         )
@@ -360,8 +351,7 @@ mod tests {
             TestServer::start("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".into())
                 .unwrap();
         let cache = RemoteCache::new(
-            test_server.base_url(),
-            "cache-id",
+            test_server.base_url().join("api/caches/cache-id").unwrap(),
             HttpClient::default().unwrap(),
             auth_token(),
         )
@@ -386,8 +376,7 @@ mod tests {
         let test_server = TestServer::start(EMPTY_RESPONSE.into()).unwrap();
         let addr = test_server.addr();
         let cache = RemoteCache::new(
-            test_server.base_url(),
-            "cache-id",
+            test_server.base_url().join("api/caches/cache-id").unwrap(),
             HttpClient::default().unwrap(),
             auth_token(),
         )
