@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1](https://github.com/jgosmann/btdt/compare/btdt-cli-v0.4.0...btdt-cli-v0.4.1) - 2025-12-20
+
+### Fixed
+
+- Support trailing newlines for auth token
+
 ## [0.4.0](https://github.com/jgosmann/btdt/compare/btdt-cli-v0.3.5...btdt-cli-v0.4.0) - 2025-12-07
 
 ### Fixed
