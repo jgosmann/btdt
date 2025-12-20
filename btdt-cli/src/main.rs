@@ -159,7 +159,7 @@ impl CacheRef {
                         auth_token_file.display()
                     )
                 })?;
-                let token = UnverifiedBiscuit::from_base64(token_bytes)
+                let token = UnverifiedBiscuit::from_base64(token_bytes.trim_ascii())
                     .with_context(|| "Could not parse authentication token")?;
                 let http_client = if self.root_cert.is_empty() {
                     HttpClient::default()
