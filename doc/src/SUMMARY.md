@@ -2,7 +2,7 @@
 
 - [Introduction](./intro.md)
 - [Installation](./install.md)
-- [Getting Started](./getting_started.md)
+- [Getting Started](./getting-started.md)
 
 # btdt-server
 
