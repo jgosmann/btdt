@@ -3,6 +3,7 @@
 - [Introduction](./intro.md)
 - [Installation](./install.md)
 - [Getting Started](./getting-started.md)
+- [CLI reference](cli-reference.md)
 
 # btdt-server
 
