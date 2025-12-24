@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2](https://github.com/jgosmann/btdt/compare/btdt-cli-v0.4.1...btdt-cli-v0.4.2) - 2025-12-24
+
+### Fixed
+
+- CLI description text
+
+### Other
+
+- Fix missing word in readme
+- Update documentation for btdt-server
+
 ## [0.4.1](https://github.com/jgosmann/btdt/compare/btdt-cli-v0.4.0...btdt-cli-v0.4.1) - 2025-12-20
 
 ### Fixed
