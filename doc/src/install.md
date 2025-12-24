@@ -7,9 +7,14 @@ There are multiple ways to install `btdt`. Choose the method from below that bes
 
 ## Pre-compiled binaries
 
-You can download pre-compiled binaries from the [GitHub Releases page](https://github.com/jgosmann/btdt/releases).
+You can download pre-compiled binaries from the [GitHub Releases
+page](https://github.com/jgosmann/btdt/releases?q=btdt-cli&expanded=true) (look for `btdt-cli` releases).
 The archive contains a single executable binary `btdt`.
 You might want to place it in your `$PATH` for easy access.
+
+For Linux, you have the choice between a version depending on a suffciently recent `glibc` version
+(`-gnu` suffix) and a statically linked version (`-musl` suffix) that should work on most systems,
+even without `glibc`.
 
 ## Docker images
 

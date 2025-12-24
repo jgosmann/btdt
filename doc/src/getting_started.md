@@ -72,9 +72,34 @@ fi
 This will store the latest cached dependencies also under the key `fallback`. This cache entry will be used, if no more
 specific cache enry is found.
 
+## Using a remote cache
+
+Instead of using a local filesystem path for the cache, you can also use a remote cache server.
+For this, you need to have a `btdt-server` instance running somewhere.
+You can then specify the URL of the cache endpoint and the file with the authentication token,
+to use the remote cache:
+
+```sh
+# restore
+btdt restore \
+  --cache https://btdt-server.example.com:8707/api/caches/cache-name \
+  --auth-token-file ./auth-token \
+  --keys "$CACHE_KEY" \
+  node_modules
+
+# store
+btdt store \
+  --cache https://btdt-server.example.com:8707/api/caches/cache-name \
+  --auth-token-file ./auth-token \
+  --keys "$CACHE_KEY" \
+  node_modules
+```
+
+Note that the file with the authentication token must be readable only by the user running `btdt`.
+
 ## Cleanup
 
-To prevent the cache from growing indefinitely, you might want to clean up old cache entries from time to time, for
+To prevent a local cache from growing indefinitely, you might want to clean up old cache entries from time to time, for
 example to only keep cache entries accessed within the last seven days and limit the cache size to at most 10 GiB:
 
 ```sh

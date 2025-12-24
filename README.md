@@ -3,6 +3,8 @@
 `btdt` is a tool for flexible caching files in CI pipelines.
 By being a simple CLI program, it is agnostic to the CI platform and can be integrated into various pipelines.
 
+Cached data can either be stored locally in the filesystem, or remotely using the server component `btdt-server`.
+
 **This tool is still under active development and not feature complete yet.**
 See below for details.
 
@@ -39,7 +41,8 @@ Regarding Jenkins, I know of two caching plugins and I have my quarrels with bot
 - [Job Cacher](https://plugins.jenkins.io/jobcacher/) will delete the complete cache once it reaches the maximum size.
   This is inefficient and I prefer to delete least recently used caches until the limit is met. The plugin also does
   not share the cache between different build jobs which severely limits its usefulness in certain scenarios. We also
-  had some other constraints that made it impossible to use this plugin, but a CLI tool could have been integrated.
+  had some other constraints that made it impossible to use this plugin, but a CLI tool could have been integrated
+  easily.
 - [jenkins-pipeline-cache-plugin](https://github.com/j3t/jenkins-pipeline-cache-plugin) requires S3 API compatible
   storage, which excludes some other use cases. It also doesn't seem to provide a way to limit the cache size.
 
@@ -57,13 +60,11 @@ But I don't think those are perfect:
 
 ## State of development
 
-A basic version of `btdt` that can be used in some scenarios is working.
-I still intend to implement the following features:
+A basic version of `btdt` that can be used in most scenarios is working.
+Missing features concern primarily covenience and ease of use:
 
-- A server for storing caches remotely.
 - Compression of the cache (to reduce the amount of data transferred).
 - Hashing multiple files in a stable way for the cache key.
 - A templating system for cache keys, such that `btdt hash` doesn't need to be called,
   but a cache key in the form of `cache-key-${hashFiles('**/package-lock.json')}` can be used directly.
-- Potentially, configuration via environment variables and/or configuration files.
 - Potentially, using S3 compatible APIs as storage backend.
