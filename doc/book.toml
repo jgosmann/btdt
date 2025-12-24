@@ -1,7 +1,6 @@
 [book]
 authors = ["Jan Gosmann"]
 language = "en"
-multilingual = false
 src = "src"
 title = "btdt - User Guide"
 

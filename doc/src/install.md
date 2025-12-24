@@ -2,11 +2,8 @@
 
 There are multiple ways to install `btdt`. Choose the method from below that best fits your needs.
 
-<div class="warning">
-
-Currently, only Unix (Linux, macOS) systems are supported.
-
-</div>
+> [!NOTE]
+> Currently, only Unix (Linux, macOS) systems are supported.
 
 ## Pre-compiled binaries
 
