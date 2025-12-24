@@ -1,6 +1,6 @@
 # btdt: "been there, done that"
 
-`btdt` is a tool for flexible caching files in CI pipelines.
+`btdt` is a tool for flexible caching of files in CI pipelines.
 By being a simple CLI program, it is agnostic to the CI platform and can be integrated into various pipelines.
 
 Cached data can either be stored locally in the filesystem, or remotely using the server component `btdt-server`.
