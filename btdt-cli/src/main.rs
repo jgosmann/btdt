@@ -22,7 +22,8 @@ use url::Url;
 /// into any pipeline.
 ///
 /// Cached files can be stored in the local filesystem (e.g. mounted from a persistent volume in
-/// Kubernetes/Tekton, or a workspace folder in Jenkins).
+/// Kubernetes/Tekton, or a workspace folder in Jenkins), or remotely through a `btdt-server`
+/// instance.
 #[derive(Parser)]
 #[command(version)]
 struct CliOpts {
