@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-850161a5.js";
+            window.path_to_searchindex_js = "searchindex-3710117f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-7bb95ebd.js"></script>
+        <script src="toc-0932531f.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -179,7 +179,7 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="btdt-been-there-done-that"><a class="header" href="#btdt-been-there-done-that">btdt: “been there, done that”</a></h1>
-<p><code>btdt</code> is a tool for flexible caching files in CI pipelines.
+<p><code>btdt</code> is a tool for flexible caching of files in CI pipelines.
 By being a simple CLI program, it is agnostic to the CI platform and can be integrated into various pipelines.</p>
 <p>Cached data can either be stored locally in the filesystem, or remotely using the server component <code>btdt-server</code>.</p>
 <p><strong>This tool is still under active development and not feature complete yet.</strong>
@@ -341,6 +341,79 @@ btdt store \
 example to only keep cache entries accessed within the last seven days and limit the cache size to at most 10 GiB:</p>
 <pre><code class="language-sh">btdt clean --cache path/to/cache --max-age 7d --max-size 10GiB
 </code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="cli-reference"><a class="header" href="#cli-reference">CLI reference</a></h1>
+<p>The general syntax of the <code>btdt</code> command-line interface is:</p>
+<pre><code class="language-sh">btdt &lt;SUBCOMMAND&gt; [OPTIONS]
+</code></pre>
+<p>The available subcommands are described below.</p>
+<h2 id="clean"><a class="header" href="#clean">clean</a></h2>
+<pre><code class="language-sh">btdt clean [OPTIONS] --cache &lt;CACHE&gt;
+</code></pre>
+<p>Clean old entries from a local cache.</p>
+<h3 id="-c-cache---cache-cache"><a class="header" href="#-c-cache---cache-cache"><code>-c &lt;CACHE&gt;</code>, <code>--cache &lt;CACHE&gt;</code></a></h3>
+<p>Path to the local cache directory to clean.</p>
+<h3 id="--max-age-duration"><a class="header" href="#--max-age-duration"><code>--max-age &lt;DURATION&gt;</code></a></h3>
+<p>Maximum age (e.g. <code>7d</code>, <code>48h</code>, <code>1d 12h</code>) of cache entries to keep. Cache entries not accessed within this duration will
+be
+deleted.</p>
+<h3 id="--max-size-size"><a class="header" href="#--max-size-size"><code>--max-size &lt;SIZE&gt;</code></a></h3>
+<p>Maximum total size (e.g. <code>10GiB</code>, <code>500MB</code>) of the cache. If the cache exceeds this size, the least recently used caches
+are deleted until the total size is below this limit.</p>
+<h2 id="hash"><a class="header" href="#hash">hash</a></h2>
+<pre><code class="language-sh">btdt hash &lt;PATH&gt;
+</code></pre>
+<p>Calculate the hash of a file and print it to the standard output.</p>
+<h2 id="help"><a class="header" href="#help">help</a></h2>
+<pre><code class="language-sh">btdt help [SUBCOMMAND]
+</code></pre>
+<p>Print general help or help for a specific subcommand.</p>
+<h2 id="restore"><a class="header" href="#restore">restore</a></h2>
+<pre><code class="language-sh">btdt restore [OPTIONS] --keys &lt;KEYS&gt; --cache &lt;CACHE&gt; &lt;DESTINATION_DIR&gt;
+</code></pre>
+<p>Restore cached data from a cache to <code>&lt;DESTINATION_DIR&gt;</code>.
+The first key that exists in the cache is used.</p>
+<p>The result of the cache lookup is indicated via the exit code:</p>
+<ul>
+<li><code>0</code>: Data was successfully restored from the cache using the primary (first listed) key.</li>
+<li><code>1</code>: General error.</li>
+<li><code>2</code>: Error in the command invocation or arguments.</li>
+<li><code>3</code>: Files were <strong>restored</strong>, but not using the primary key (i.e., a fallback key was used).</li>
+<li><code>4</code>: No cache entry found for any of the specified keys.</li>
+</ul>
+<h3 id="-a-auth_token_file---auth-token-file-auth_token_file"><a class="header" href="#-a-auth_token_file---auth-token-file-auth_token_file"><code>-a &lt;AUTH_TOKEN_FILE&gt;</code>, <code>--auth-token-file &lt;AUTH_TOKEN_FILE&gt;</code></a></h3>
+<p>Path to a file containing the authentication token for accessing a remote cache.</p>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p>The file must be readable only by the user running <code>btdt</code>, i.e., it should have permissions <code>0600</code>.</p>
+</blockquote>
+<h3 id="-c-cache---cache-cache-1"><a class="header" href="#-c-cache---cache-cache-1"><code>-c &lt;CACHE&gt;</code>, <code>--cache &lt;CACHE&gt;</code></a></h3>
+<p>Path to the cache (local directory or remote cache URL).</p>
+<h3 id="-k-keys---keys-keys"><a class="header" href="#-k-keys---keys-keys"><code>-k &lt;KEYS&gt;</code>, <code>--keys &lt;KEYS&gt;</code></a></h3>
+<p>Comma-separated list of cache keys to try in order. This argument may also be repeated to specify multiple keys.</p>
+<h3 id="--root-cert-root_cert"><a class="header" href="#--root-cert-root_cert"><code>--root-cert &lt;ROOT_CERT&gt;</code></a></h3>
+<p>Root certificates (in PEM format) to trust for remote caches (instead of system’s root certificates).</p>
+<h3 id="--success-rc-on-any-key"><a class="header" href="#--success-rc-on-any-key"><code>--success-rc-on-any-key</code></a></h3>
+<p>Exit with success status code if any key is found in the cache.</p>
+<p>Usually, the success exit code is only returned if the primary key (i.e. first listed key) is found in the cache, and 3
+is returned if another key was restored.</p>
+<h2 id="store"><a class="header" href="#store">store</a></h2>
+<pre><code class="language-sh">btdt store [OPTIONS] --keys &lt;KEYS&gt; --cache &lt;CACHE&gt; &lt;SOURCE_DIR&gt;
+</code></pre>
+<p>Store data from <code>&lt;SOURCE_DIR&gt;</code> into the cache under the specified keys.</p>
+<h3 id="-a-auth_token_file---auth-token-file-auth_token_file-1"><a class="header" href="#-a-auth_token_file---auth-token-file-auth_token_file-1"><code>-a &lt;AUTH_TOKEN_FILE&gt;</code>, <code>--auth-token-file &lt;AUTH_TOKEN_FILE&gt;</code></a></h3>
+<p>Path to a file containing the authentication token for accessing a remote cache.</p>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p>The file must be readable only by the user running <code>btdt</code>, i.e., it should have permissions <code>0600</code>.</p>
+</blockquote>
+<h3 id="-c-cache---cache-cache-2"><a class="header" href="#-c-cache---cache-cache-2"><code>-c &lt;CACHE&gt;</code>, <code>--cache &lt;CACHE&gt;</code></a></h3>
+<p>Path to the cache (local directory or remote cache URL).</p>
+<h3 id="-k-keys---keys-keys-1"><a class="header" href="#-k-keys---keys-keys-1"><code>-k &lt;KEYS&gt;</code>, <code>--keys &lt;KEYS&gt;</code></a></h3>
+<p>Comma-separated list of cache keys to store the cached data under.
+This argument may also be repeated to specify multiple keys.</p>
+<h3 id="--root-cert-root_cert-1"><a class="header" href="#--root-cert-root_cert-1"><code>--root-cert &lt;ROOT_CERT&gt;</code></a></h3>
+<p>Root certificates (in PEM format) to trust for remote caches (instead of system’s root certificates).</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="deployment"><a class="header" href="#deployment">Deployment</a></h1>
 <p>The <code>btdt-server</code> is a server application that allows to store and retrieve cached files with <code>btdt</code> on this server.</p>
@@ -582,12 +655,129 @@ For example, to attenuate an existing token to only allow accessing the cache <c
 new tokens.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="overview"><a class="header" href="#overview">Overview</a></h1>
-<p>While the <a href="#getting-started">Getting Started</a> guide provides a high-level overview of how to use <code>btdt</code>,
+<p>While the <a href="getting_started.html">Getting Started</a> guide provides a high-level overview of how to use <code>btdt</code>,
 this section contains guides for specific CI systems:</p>
 <ul>
+<li><a href="#jenkins">Jenkins</a></li>
 <li><a href="#tekton">Tekton</a></li>
 </ul>
 <p>If you have experience with a CI system that is not covered here, please consider contributing a guide.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="jenkins"><a class="header" href="#jenkins">Jenkins</a></h1>
+<p>This guide explains how to use <code>btdt</code> in a <a href="https://www.jenkins.io/">Jenkins</a> pipeline.</p>
+<p>You can either use a cache local to the Jenkins agents (but it won’t be shared between different agents),
+or a remote cache using a <code>btdt-server</code> instance.</p>
+<h2 id="agent-local-cache"><a class="header" href="#agent-local-cache">Agent-local cache</a></h2>
+<p>For an agent-local setup, you only need to <a href="#installation">install the <code>btdt</code> CLI</a> on your Jenkins agents.
+Then you can integrate <code>btdt</code> commands into your pipeline script as described
+in <a href="getting_started.html">Getting Started</a>.
+Ensure that the cache path you use is writable by the Jenkins agent user.</p>
+<p>An example <code>Jenkinsfile</code> could look like this:</p>
+<pre><code class="language-groovy">#!groovy
+
+pipeline {
+    agent any
+
+    stages {
+        stage('Install dependencies') {
+            steps {
+                sh '''
+                    CACHE_PATH=/var/lib/btdt/cache  # Path to cache on the Jenkins agent
+                    CACHE_KEY=cache-key-$(btdt hash package-lock.json)
+                    btdt restore --cache "$CACHE_PATH" --keys $CACHE_KEY node_modules
+                    RESTORE_EXIT_CODE=$?
+                    if [ $RESTORE_EXIT_CODE -ne 0 ]; then
+                        npm ci  # Install dependencies
+                        btdt store --cache "$CACHE_PATH" --keys $CACHE_KEY node_modules
+                    fi
+                '''
+            }
+        }
+        stage('Run tests') {
+            steps {
+                // ...
+            }
+        }
+    }
+}
+</code></pre>
+<h3 id="cleanup-1"><a class="header" href="#cleanup-1">Cleanup</a></h3>
+<p>To prevent the local cache from growing indefinitely, you can set up a periodic cleanup job in Jenkins.
+For each agent, create a new Jenkins pipeline job that runs periodically (e.g., daily or weekly)
+and add a stage that runs the <code>btdt cleanup</code> command on the cache path.
+For example:</p>
+<pre><code class="language-groovy">#!groovy
+pipeline {
+    agent { node { label 'your-agent-label' } }
+
+    triggers {
+        cron('H H * * 0')  // Run weekly on Sundays
+    }
+
+    stages {
+        stage('Cleanup cache') {
+            steps {
+                sh '''
+                    CACHE_PATH=/var/lib/btdt/cache  # Path to cache on the Jenkins agent
+                    btdt cleanup --cache "$CACHE_PATH" --max-age 7d --max-size 10G
+                '''
+            }
+        }
+    }
+}
+</code></pre>
+<h2 id="remote-cache-with-btdt-server"><a class="header" href="#remote-cache-with-btdt-server">Remote cache with btdt-server</a></h2>
+<p>The setup with a remote cache is very similar to the agent-local setup.
+You also need to <a href="#installation">install the <code>btdt</code> CLI</a> on your Jenkins agents.
+In addition, you need to <a href="#deployment">have a <code>btdt-server</code> instance running somewhere</a>
+and <a href="#authorization-1">an authorization token generated</a>.</p>
+<p>Provide the authorization token as “secret file” credential in Jenkins (“Manage Jenkins” → “Credentials”).</p>
+<p>Then you can integrate <code>btdt</code> commands into your pipeline script as described
+in <a href="getting_started.html">Getting Started</a>,
+using the remote cache URL and an authentication token file provided from the Jenkins credential.</p>
+<p>An example <code>Jenkinsfile</code> could look like this:</p>
+<pre><code class="language-groovy">#!groovy
+
+pipeline {
+    agent any
+
+    stages {
+        stage('Install dependencies') {
+            steps {
+                script {
+                    withCredentials([
+                            file(credentialsId: 'btdt-auth-token', variable: 'BTDT_AUTH_TOKEN_FILE'),
+                    ]) {
+                        sh '''
+                            CACHE_URL=http://btdt.example.com:8707/api/caches/my-cache
+                            CACHE_KEY=cache-key-$(btdt hash package-lock.json)
+                            btdt restore \\
+                              --cache "$CACHE_URL" \\
+                              --auth-token-file "$BTDT_AUTH_TOKEN_FILE" \\
+                              --keys $CACHE_KEY \\
+                              node_modules
+                            RESTORE_EXIT_CODE=$?
+                            if [ $RESTORE_EXIT_CODE -ne 0 ]; then
+                                npm ci  # Install dependencies
+                                btdt store \\
+                                  --cache "$CACHE_URL" \\
+                                  --auth-token-file "$BTDT_AUTH_TOKEN_FILE" \\
+                                  --keys $CACHE_KEY \\
+                                  node_modules
+                            fi
+                        '''
+                    }
+                }
+            }
+            stage('Run tests') {
+                steps {
+                    // ...
+                }
+            }
+        }
+    }
+}
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="tekton"><a class="header" href="#tekton">Tekton</a></h1>
 <p>This guide explains how to use <code>btdt</code> in a <a href="https://tekton.dev/">Tekton</a> pipeline.
@@ -695,7 +885,7 @@ spec:
         fi
         # run tests, build, etc.
 </code></pre>
-<p>Note, if you are using <a href="#using-multiple-cache-keys">fallback keys</a>, you would always want to run
+<p>Note, if you are using <a href="getting_started.html#using-multiple-cache-keys">fallback keys</a>, you would always want to run
 <code>npm ci</code> to ensure that the dependencies are installed correctly.</p>
 <h3 id="store-the-cache"><a class="header" href="#store-the-cache">Store the cache</a></h3>
 <p>For the cache to provide a benefit, we need to fill it if a cache miss occurred. This requires an additional step
@@ -767,7 +957,7 @@ spec:
     - name: cache
       description: Provides btdt cache.
 </code></pre>
-<h2 id="cleanup-1"><a class="header" href="#cleanup-1">Cleanup</a></h2>
+<h2 id="cleanup-2"><a class="header" href="#cleanup-2">Cleanup</a></h2>
 <p>To prevent the cache from growing indefinitely, you should configure a regular cleanup:</p>
 <h3 id="clean-task"><a class="header" href="#clean-task">Clean task</a></h3>
 <pre><code class="language-yaml"># task_cache-clean.yaml
