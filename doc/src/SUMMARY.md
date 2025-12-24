@@ -13,4 +13,5 @@
 # CI Integration Guides
 
 - [Overview](./ci-guides/overview.md)
+- [Jenkins](./ci-guides/jenkins.md)
 - [Tekton](./ci-guides/tekton.md)
