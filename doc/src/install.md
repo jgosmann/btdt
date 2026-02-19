@@ -28,8 +28,11 @@ docker run jgosmann/btdt help
 However, you will have to mount the directories with the cache and the files to cache into the container.
 This can be done with the [`--mount` or `--volume` option](https://docs.docker.com/engine/storage/volumes/#syntax).
 
-The images use Semantic Versioning tags. For example, `jgosmann/btdt:0.1`
-refers to the latest `v0.1.x` image.
+The images use Semantic Versioning tags. For example, `jgosmann/btdt:0.4`
+refers to the latest `v0.4.x` image.
+
+The default images are distroless non-root images. If you need a shell or other tools, you can use the variants with
+the `-alpine` suffix in the tag, e.g. `jgosmann/btdt:0.4-alpine`.
 
 ## Build from source using Rust
 

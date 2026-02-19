@@ -19,7 +19,10 @@ The archive contains a single executable binary `btdt-server` that will start th
 
 Docker images are available on [Docker Hub](https://hub.docker.com/r/jgosmann/btdt-server).
 
-The images use Semantic Versioning tags. For example, `jgosmann/btdt-server:0.1` refers to the latest `v0.1.x` image.
+The images use Semantic Versioning tags. For example, `jgosmann/btdt-server:0.4` refers to the latest `v0.4.x` image.
+
+The default images use distroless non-root images. If you need a shell or other tools, you can use the variants with the
+`-alpine` suffix in the tag, e.g. `jgosmann/btdt-server:0.4-alpine`.
 
 When running the container, you likely want to mount a few files or directories into the container:
 
