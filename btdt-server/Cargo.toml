@@ -1,6 +1,6 @@
 [package]
 name = "btdt-server"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
 authors = ["Jan Gosmann"]
 documentation = "https://jgosmann.github.io/btdt/"
@@ -19,7 +19,7 @@ name = "btdt_server_lib"
 path = "lib/lib.rs"
 
 [dependencies]
-btdt = { path = "../btdt", version = "0.4.1" }
+btdt = { path = "../btdt", version = "0.4.2" }
 bytes = "1.10.1"
 clap = { version = "4.5.53", features = ["derive", "env"] }
 config = { version = "0.15.13", features = ["toml"] }
