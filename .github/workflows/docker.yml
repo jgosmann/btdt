@@ -8,6 +8,11 @@ on:
       version:
         description: 'Version tag `btdt-[cli|server]-vX.Y.Z` to build a Docker image for.'
         required: true
+      base_image:
+        description: 'Base image to use.'
+        default: gcr.io/distroless/cc-debian13:nonroot
+      tag_suffix:
+        description: 'String to append to the image tags.'
 
 jobs:
   publish:
@@ -65,7 +70,7 @@ jobs:
               https://api.github.com/repos/jgosmann/btdt/releases \
           | jq --raw-output '.[]["tag_name"] | sub("^v"; "")' \
           | docker run --rm jgosmann/gen-semver-tags:0.1 ${{ steps.version-info.outputs.version }} \
-          | awk '{print "${{ steps.version-info.outputs.image_name }}:"$0}' \
+          | awk '{print "${{ steps.version-info.outputs.image_name }}:"$0"${{ inputs.tag_suffix }}"}' \
           >> "$GITHUB_OUTPUT"
           echo 'EOF' >> "$GITHUB_OUTPUT"
 
@@ -80,3 +85,14 @@ jobs:
           tags: ${{ steps.image-tags.outputs.TAGS }}
           platforms: linux/amd64,linux/arm64
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ steps.version-info.outputs.component }}.Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.image-tags.outputs.TAGS }}
+          platforms: linux/amd64,linux/arm64
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: "BASE_IMAGE=${{ inputs.base_image }}"
