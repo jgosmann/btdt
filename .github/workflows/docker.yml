@@ -21,8 +21,10 @@ jobs:
         variant:
           - base_image: gcr.io/distroless/cc-debian13:nonroot
             tag_suffix: ''
+            abi: gnu
           - base_image: alpine:3
             tag_suffix: '-alpine'
+            abi: musl
 
     steps:
       - name: Extract image name and version
@@ -32,7 +34,7 @@ jobs:
           TAG=${REF#refs/*/}
           VERSION=${TAG#btdt-*-}
           COMPONENT=${TAG%-v*}
-          
+
           echo "component=${COMPONENT}" >> $GITHUB_OUTPUT
           echo "image_name=jgosmann/${COMPONENT/btdt-cli/btdt}" >> $GITHUB_OUTPUT
           echo "version=${VERSION#v}" >> $GITHUB_OUTPUT
@@ -89,4 +91,6 @@ jobs:
           tags: ${{ steps.image-tags.outputs.TAGS }}
           platforms: linux/amd64,linux/arm64
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: "BASE_IMAGE=${{ matrix.variant.base_image }}"
+          build-args: |
+            BASE_IMAGE=${{ matrix.variant.base_image }}
+            TARGETABI=${{ matrix.variant.abi }}
