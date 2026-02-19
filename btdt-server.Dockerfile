@@ -1,3 +1,5 @@
+ARG BASE_IMAGE=gcr.io/distroless/cc-debian13:nonroot
+
 FROM rust:1 AS builder
 ARG TARGETARCH
 WORKDIR /app
@@ -12,7 +14,7 @@ RUN case ${TARGETARCH} in \
     mkdir -p /tmp/rootfs/lib/${DEBARCH}-linux-gnu && \
     cp /lib/${DEBARCH}-linux-gnu/libzstd.so.1 /tmp/rootfs/lib/${DEBARCH}-linux-gnu/libzstd.so.1
 
-FROM gcr.io/distroless/cc-debian13:nonroot
+FROM ${BASE_IMAGE}
 COPY --from=builder /tmp/rootfs/lib /lib
 COPY --from=builder /app/target/release/btdt-server /btdt-server
 ENV BTDT_AUTH_PRIVATE_KEY=/auth_private_key.pem
