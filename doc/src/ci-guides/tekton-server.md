@@ -340,25 +340,17 @@ spec:
           readOnly: true
       securityContext:
         runAsUser: 65532
-    - name: restore-cache
-      image: jgosmann/btdt:0.4.1-alpine
+    - name: run-tests
+      image: node
       workingDir: $(workspaces.git-sources.path)
-      onError: continue
       script: |
         #!/bin/sh
-        CACHE_KEY=node-modules-$(btdt hash package-lock.json)
-        echo "Cache key: $CACHE_KEY"
-        btdt restore \
-          --cache http://btdt-server.default.svc.cluster.local:8707/api/caches/default \
-          --auth-token-file /tmp/btdt-token/token \
-          --keys $CACHE_KEY \
-          node_modules
-      volumeMounts:
-        - name: btdt-token
-          mountPath: /tmp/btdt-token
-          readOnly: true
-      securityContext:
-        runAsUser: 65532
+        if [ $(cat $(steps.step-restore-cache.exitCode.path)) -eq 0 ]; then
+          echo "Cache restore succeeded, skipping npm ci"
+        else
+          npm ci
+        fi
+        # run tests, build, etc.
     - name: store-cache
       image: jgosmann/btdt:0.4.1-alpine
       workingDir: $(workspaces.git-sources.path)
