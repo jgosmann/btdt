@@ -97,7 +97,7 @@ data:
 
 ### Deployment and service for the btdt-server
 
-Now, we can create a deployment for the `btdt-server` itself. Because the default `btdt-server` container image
+Now, we can create a deployment for the `btdt-server` itself. Because the `btdt-server` container image
 is distroless and uses a non-root user, we need to use an init container to set the correct permissions for the private
 key file.
 
