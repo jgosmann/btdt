@@ -101,9 +101,9 @@ spec:
       onError: continue
       script: |
         #!/bin/sh
-        CACHE_KEY=node-modules-$(btdt hash package-lock.json)
+        CACHE_KEY=node-modules-$(/btdt hash package-lock.json)
         echo "Cache key: $CACHE_KEY"
-        btdt restore --cache $(workspaces.cache.path) --keys $CACHE_KEY node_modules
+        /btdt restore --cache $(workspaces.cache.path) --keys $CACHE_KEY node_modules
 ```
 
 ### Install dependencies only on cache miss
@@ -155,9 +155,9 @@ spec:
             echo "Cache restore succeeded, skipping cache store"
             exit 0
         fi
-        CACHE_KEY=node-modules-$(btdt hash package-lock.json)
+        CACHE_KEY=node-modules-$(/btdt hash package-lock.json)
         echo "Cache key: $CACHE_KEY"
-        btdt store --cache $(workspaces.cache.path) --keys $CACHE_KEY node_modules
+        /btdt store --cache $(workspaces.cache.path) --keys $CACHE_KEY node_modules
 ```
 
 ### Example of complete task
@@ -178,9 +178,9 @@ spec:
       onError: continue
       script: |
         #!/bin/sh
-        CACHE_KEY=node-modules-$(btdt hash package-lock.json)
+        CACHE_KEY=node-modules-$(/btdt hash package-lock.json)
         echo "Cache key: $CACHE_KEY"
-        btdt restore --cache $(workspaces.cache.path) --keys $CACHE_KEY node_modules
+        /btdt restore --cache $(workspaces.cache.path) --keys $CACHE_KEY node_modules
     - name: run-tests
       image: node
       workingDir: $(workspaces.git-sources.path)
@@ -201,9 +201,9 @@ spec:
             echo "Cache restore succeeded, skipping cache store"
             exit 0
         fi
-        CACHE_KEY=node-modules-$(btdt hash package-lock.json)
+        CACHE_KEY=node-modules-$(/btdt hash package-lock.json)
         echo "Cache key: $CACHE_KEY"
-        btdt store --cache $(workspaces.cache.path) --keys $CACHE_KEY node_modules
+        /btdt store --cache $(workspaces.cache.path) --keys $CACHE_KEY node_modules
 
   workspaces:
     - name: git-sources

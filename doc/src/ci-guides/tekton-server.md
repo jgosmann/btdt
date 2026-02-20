@@ -230,9 +230,9 @@ spec:
       onError: continue
       script: |
         #!/bin/sh
-        CACHE_KEY=node-modules-$(btdt hash package-lock.json)
+        CACHE_KEY=node-modules-$(/btdt hash package-lock.json)
         echo "Cache key: $CACHE_KEY"
-        btdt restore \
+        /btdt restore \
           --cache http://btdt-server.default.svc.cluster.local:8707/api/caches/default \
           --auth-token-file /tmp/btdt-token/token \
           --keys $CACHE_KEY \
@@ -241,8 +241,6 @@ spec:
         - name: btdt-token
           mountPath: /tmp/btdt-token
           readOnly: true
-      securityContext:
-        runAsUser: 65532
 ```
 
 ### Install dependencies only on cache miss
@@ -294,9 +292,9 @@ spec:
             echo "Cache restore succeeded, skipping cache store"
             exit 0
         fi
-        CACHE_KEY=node-modules-$(btdt hash package-lock.json)
+        CACHE_KEY=node-modules-$(/btdt hash package-lock.json)
         echo "Cache key: $CACHE_KEY"
-        btdt store \
+        /btdt store \
           --cache http://btdt-server.default.svc.cluster.local:8707/api/caches/default \
           --auth-token-file /tmp/btdt-token/token \
           --keys $CACHE_KEY \
@@ -305,8 +303,6 @@ spec:
         - name: btdt-token
           mountPath: /tmp/btdt-token
           readOnly: true
-      securityContext:
-        runAsUser: 65532
 ```
 
 ### Example of complete task
@@ -327,9 +323,9 @@ spec:
       onError: continue
       script: |
         #!/bin/sh
-        CACHE_KEY=node-modules-$(btdt hash package-lock.json)
+        CACHE_KEY=node-modules-$(/btdt hash package-lock.json)
         echo "Cache key: $CACHE_KEY"
-        btdt restore \
+        /btdt restore \
           --cache http://btdt-server.default.svc.cluster.local:8707/api/caches/default \
           --auth-token-file /tmp/btdt-token/token \
           --keys $CACHE_KEY \
@@ -338,8 +334,6 @@ spec:
         - name: btdt-token
           mountPath: /tmp/btdt-token
           readOnly: true
-      securityContext:
-        runAsUser: 65532
     - name: run-tests
       image: node
       workingDir: $(workspaces.git-sources.path)
@@ -360,9 +354,9 @@ spec:
             echo "Cache restore succeeded, skipping cache store"
             exit 0
         fi
-        CACHE_KEY=node-modules-$(btdt hash package-lock.json)
+        CACHE_KEY=node-modules-$(/btdt hash package-lock.json)
         echo "Cache key: $CACHE_KEY"
-        btdt store \
+        /btdt store \
           --cache http://btdt-server.default.svc.cluster.local:8707/api/caches/default \
           --auth-token-file /tmp/btdt-token/token \
           --keys $CACHE_KEY \
@@ -371,8 +365,6 @@ spec:
         - name: btdt-token
           mountPath: /tmp/btdt-token
           readOnly: true
-      securityContext:
-        runAsUser: 65532
   volumes:
     - name: btdt-token
       secret:
