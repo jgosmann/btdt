@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9d5f9626.js";
+            window.path_to_searchindex_js = "searchindex-6eae0d40.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-89348b07.js"></script>
@@ -996,9 +996,9 @@ spec:
       onError: continue
       script: |
         #!/bin/sh
-        CACHE_KEY=node-modules-$(btdt hash package-lock.json)
+        CACHE_KEY=node-modules-$(/btdt hash package-lock.json)
         echo "Cache key: $CACHE_KEY"
-        btdt restore \
+        /btdt restore \
           --cache http://btdt-server.default.svc.cluster.local:8707/api/caches/default \
           --auth-token-file /tmp/btdt-token/token \
           --keys $CACHE_KEY \
@@ -1007,8 +1007,6 @@ spec:
         - name: btdt-token
           mountPath: /tmp/btdt-token
           readOnly: true
-      securityContext:
-        runAsUser: 65532
 </code></pre>
 <h3 id="install-dependencies-only-on-cache-miss"><a class="header" href="#install-dependencies-only-on-cache-miss">Install dependencies only on cache miss</a></h3>
 <p>Depending on what you are caching, you might want to run some commands only a cache miss to generate the files that
@@ -1051,9 +1049,9 @@ spec:
             echo "Cache restore succeeded, skipping cache store"
             exit 0
         fi
-        CACHE_KEY=node-modules-$(btdt hash package-lock.json)
+        CACHE_KEY=node-modules-$(/btdt hash package-lock.json)
         echo "Cache key: $CACHE_KEY"
-        btdt store \
+        /btdt store \
           --cache http://btdt-server.default.svc.cluster.local:8707/api/caches/default \
           --auth-token-file /tmp/btdt-token/token \
           --keys $CACHE_KEY \
@@ -1062,8 +1060,6 @@ spec:
         - name: btdt-token
           mountPath: /tmp/btdt-token
           readOnly: true
-      securityContext:
-        runAsUser: 65532
 </code></pre>
 <h3 id="example-of-complete-task"><a class="header" href="#example-of-complete-task">Example of complete task</a></h3>
 <p>When putting all of this together, your task definition will look something like this:</p>
@@ -1080,9 +1076,9 @@ spec:
       onError: continue
       script: |
         #!/bin/sh
-        CACHE_KEY=node-modules-$(btdt hash package-lock.json)
+        CACHE_KEY=node-modules-$(/btdt hash package-lock.json)
         echo "Cache key: $CACHE_KEY"
-        btdt restore \
+        /btdt restore \
           --cache http://btdt-server.default.svc.cluster.local:8707/api/caches/default \
           --auth-token-file /tmp/btdt-token/token \
           --keys $CACHE_KEY \
@@ -1091,8 +1087,6 @@ spec:
         - name: btdt-token
           mountPath: /tmp/btdt-token
           readOnly: true
-      securityContext:
-        runAsUser: 65532
     - name: run-tests
       image: node
       workingDir: $(workspaces.git-sources.path)
@@ -1113,9 +1107,9 @@ spec:
             echo "Cache restore succeeded, skipping cache store"
             exit 0
         fi
-        CACHE_KEY=node-modules-$(btdt hash package-lock.json)
+        CACHE_KEY=node-modules-$(/btdt hash package-lock.json)
         echo "Cache key: $CACHE_KEY"
-        btdt store \
+        /btdt store \
           --cache http://btdt-server.default.svc.cluster.local:8707/api/caches/default \
           --auth-token-file /tmp/btdt-token/token \
           --keys $CACHE_KEY \
@@ -1124,8 +1118,6 @@ spec:
         - name: btdt-token
           mountPath: /tmp/btdt-token
           readOnly: true
-      securityContext:
-        runAsUser: 65532
   volumes:
     - name: btdt-token
       secret:
@@ -1219,9 +1211,9 @@ spec:
       onError: continue
       script: |
         #!/bin/sh
-        CACHE_KEY=node-modules-$(btdt hash package-lock.json)
+        CACHE_KEY=node-modules-$(/btdt hash package-lock.json)
         echo "Cache key: $CACHE_KEY"
-        btdt restore --cache $(workspaces.cache.path) --keys $CACHE_KEY node_modules
+        /btdt restore --cache $(workspaces.cache.path) --keys $CACHE_KEY node_modules
 </code></pre>
 <h3 id="install-dependencies-only-on-cache-miss-1"><a class="header" href="#install-dependencies-only-on-cache-miss-1">Install dependencies only on cache miss</a></h3>
 <p>Depending on what you are caching, you might want to run some commands only a cache miss to generate the files that
@@ -1264,9 +1256,9 @@ spec:
             echo "Cache restore succeeded, skipping cache store"
             exit 0
         fi
-        CACHE_KEY=node-modules-$(btdt hash package-lock.json)
+        CACHE_KEY=node-modules-$(/btdt hash package-lock.json)
         echo "Cache key: $CACHE_KEY"
-        btdt store --cache $(workspaces.cache.path) --keys $CACHE_KEY node_modules
+        /btdt store --cache $(workspaces.cache.path) --keys $CACHE_KEY node_modules
 </code></pre>
 <h3 id="example-of-complete-task-1"><a class="header" href="#example-of-complete-task-1">Example of complete task</a></h3>
 <p>When putting all of this together, your task definition will look something like this:</p>
@@ -1283,9 +1275,9 @@ spec:
       onError: continue
       script: |
         #!/bin/sh
-        CACHE_KEY=node-modules-$(btdt hash package-lock.json)
+        CACHE_KEY=node-modules-$(/btdt hash package-lock.json)
         echo "Cache key: $CACHE_KEY"
-        btdt restore --cache $(workspaces.cache.path) --keys $CACHE_KEY node_modules
+        /btdt restore --cache $(workspaces.cache.path) --keys $CACHE_KEY node_modules
     - name: run-tests
       image: node
       workingDir: $(workspaces.git-sources.path)
@@ -1306,9 +1298,9 @@ spec:
             echo "Cache restore succeeded, skipping cache store"
             exit 0
         fi
-        CACHE_KEY=node-modules-$(btdt hash package-lock.json)
+        CACHE_KEY=node-modules-$(/btdt hash package-lock.json)
         echo "Cache key: $CACHE_KEY"
-        btdt store --cache $(workspaces.cache.path) --keys $CACHE_KEY node_modules
+        /btdt store --cache $(workspaces.cache.path) --keys $CACHE_KEY node_modules
 
   workspaces:
     - name: git-sources
