@@ -378,4 +378,7 @@ spec:
       secret:
         secretName: btdt-client-token
         defaultMode: 0600
+  workspaces:
+    - name: git-sources
+      description: Provides the workspace with the cloned repository.
 ```
