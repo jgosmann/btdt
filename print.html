@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-84f10408.js";
+            window.path_to_searchindex_js = "searchindex-1906fcca.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-89348b07.js"></script>
@@ -432,8 +432,6 @@ The archive contains a single executable binary <code>btdt-server</code> that wi
 <h3 id="docker-images-1"><a class="header" href="#docker-images-1">Docker images</a></h3>
 <p>Docker images are available on <a href="https://hub.docker.com/r/jgosmann/btdt-server">Docker Hub</a>.</p>
 <p>The images use Semantic Versioning tags. For example, <code>jgosmann/btdt-server:0.4</code> refers to the latest <code>v0.4.x</code> image.</p>
-<p>The default images use distroless non-root images. If you need a shell or other tools, you can use the variants with the
-<code>-alpine</code> suffix in the tag, e.g. <code>jgosmann/btdt-server:0.4-alpine</code>.</p>
 <p>When running the container, you likely want to mount a few files or directories into the container:</p>
 <ul>
 <li>The directory where caches are stored, so that they are persisted across container restarts.</li>
@@ -878,7 +876,7 @@ data:
     default = { type = 'Filesystem', path = '/var/lib/btdt/cache-default' }
 </code></pre>
 <h3 id="deployment-and-service-for-the-btdt-server"><a class="header" href="#deployment-and-service-for-the-btdt-server">Deployment and service for the btdt-server</a></h3>
-<p>Now, we can create a deployment for the <code>btdt-server</code> itself. Because the default <code>btdt-server</code> container image
+<p>Now, we can create a deployment for the <code>btdt-server</code> itself. Because the <code>btdt-server</code> container image
 is distroless and uses a non-root user, we need to use an init container to set the correct permissions for the private
 key file.</p>
 <pre><code class="language-yaml">apiVersion: apps/v1

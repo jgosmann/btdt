@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-84f10408.js";
+            window.path_to_searchindex_js = "../searchindex-1906fcca.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-89348b07.js"></script>
@@ -256,7 +256,7 @@ data:
     default = { type = 'Filesystem', path = '/var/lib/btdt/cache-default' }
 </code></pre>
 <h3 id="deployment-and-service-for-the-btdt-server"><a class="header" href="#deployment-and-service-for-the-btdt-server">Deployment and service for the btdt-server</a></h3>
-<p>Now, we can create a deployment for the <code>btdt-server</code> itself. Because the default <code>btdt-server</code> container image
+<p>Now, we can create a deployment for the <code>btdt-server</code> itself. Because the <code>btdt-server</code> container image
 is distroless and uses a non-root user, we need to use an init container to set the correct permissions for the private
 key file.</p>
 <pre><code class="language-yaml">apiVersion: apps/v1
