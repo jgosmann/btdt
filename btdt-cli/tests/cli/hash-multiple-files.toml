@@ -1,0 +1,4 @@
+bin.name = "btdt"
+args = "hash a.txt b.txt"
+stdout = "c29decbe771ecc96ca65386c7114390ab682b3aa6691c233542dbb2e2568b974\n"
+status.code = 0

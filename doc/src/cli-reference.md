@@ -34,10 +34,10 @@ are deleted until the total size is below this limit.
 ## hash
 
 ```sh
-btdt hash <PATH>
+btdt hash <PATHS>
 ```
 
-Calculate the hash of a file or directory and print it to the standard output.
+Calculate the hash of files and/or directories and print it to the standard output.
 
 ## help
 
