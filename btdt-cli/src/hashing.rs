@@ -4,6 +4,18 @@ use std::fs::File;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
+pub fn hash_paths(paths: &[impl AsRef<Path>]) -> anyhow::Result<Hash> {
+    if paths.len() == 1 {
+        return hash_path(paths[0].as_ref());
+    }
+
+    let mut hasher = Hasher::new();
+    for path in paths {
+        hasher.update(hash_path(path.as_ref())?.as_bytes());
+    }
+    Ok(hasher.finalize())
+}
+
 pub fn hash_path(path: &Path) -> anyhow::Result<Hash> {
     if path.is_dir() {
         return hash_dir(path);

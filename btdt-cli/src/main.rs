@@ -1,6 +1,6 @@
 mod hashing;
 
-use crate::hashing::hash_path;
+use crate::hashing::hash_paths;
 use anyhow::{Context, anyhow};
 use biscuit_auth::UnverifiedBiscuit;
 use btdt::cache::cache_dispatcher::CacheDispatcher;
@@ -59,8 +59,8 @@ enum Commands {
 
     /// Calculate the hash of a file.
     Hash {
-        /// File or directory to hash.
-        path: PathBuf,
+        /// Files or directories to hash.
+        path: Vec<PathBuf>,
     },
 
     /// Restore cached files.
@@ -217,7 +217,7 @@ fn main() -> Result<ExitCode, anyhow::Error> {
             }
         }
         Commands::Hash { path } => {
-            println!("{}", hash_path(&path)?.to_hex());
+            println!("{}", hash_paths(&path)?.to_hex());
         }
         Commands::Store {
             entries_ref,
