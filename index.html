@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6eae0d40.js";
+            window.path_to_searchindex_js = "searchindex-236dd065.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-89348b07.js"></script>
@@ -233,7 +233,6 @@ additional tooling. If you have builds that require different caches, you might 
 Missing features concern primarily covenience and ease of use:</p>
 <ul>
 <li>Compression of the cache (to reduce the amount of data transferred).</li>
-<li>Hashing multiple files in a stable way for the cache key.</li>
 <li>A templating system for cache keys, such that <code>btdt hash</code> doesn’t need to be called,
 but a cache key in the form of <code>cache-key-${hashFiles('**/package-lock.json')}</code> can be used directly.</li>
 <li>Potentially, using S3 compatible APIs as storage backend.</li>
