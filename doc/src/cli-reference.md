@@ -37,7 +37,7 @@ are deleted until the total size is below this limit.
 btdt hash <PATH>
 ```
 
-Calculate the hash of a file and print it to the standard output.
+Calculate the hash of a file or directory and print it to the standard output.
 
 ## help
 

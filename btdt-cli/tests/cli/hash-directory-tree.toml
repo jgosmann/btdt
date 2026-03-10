@@ -1,0 +1,4 @@
+bin.name = "btdt"
+args = "hash dir"
+stdout = "9dc3a8c03f6cfc2c758c4fc3158627b51dda0d103c18c41083cd7542f2e533a3\n"
+status.code = 0
