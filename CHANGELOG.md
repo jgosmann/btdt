@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3](https://github.com/jgosmann/btdt/compare/btdt-cli-v0.4.2...btdt-cli-v0.4.3) - 2026-03-10
+
+### Added
+
+- Add support for hashing multiple files
+- Add support for hashing directories recursively
+
 ## [0.4.2](https://github.com/jgosmann/btdt/compare/btdt-cli-v0.4.1...btdt-cli-v0.4.2) - 2026-02-19
 
 ### Fixed
