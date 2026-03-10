@@ -1,3 +1,6 @@
+mod hashing;
+
+use crate::hashing::hash_path;
 use anyhow::{Context, anyhow};
 use biscuit_auth::UnverifiedBiscuit;
 use btdt::cache::cache_dispatcher::CacheDispatcher;
@@ -8,7 +11,6 @@ use btdt::pipeline::Pipeline;
 use btdt::storage::filesystem::FilesystemStorage;
 use btdt::util::humanbytes;
 use clap::{Args, Parser, Subcommand};
-use std::fs::File;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -57,7 +59,7 @@ enum Commands {
 
     /// Calculate the hash of a file.
     Hash {
-        /// File to hash.
+        /// File or directory to hash.
         path: PathBuf,
     },
 
@@ -215,15 +217,7 @@ fn main() -> Result<ExitCode, anyhow::Error> {
             }
         }
         Commands::Hash { path } => {
-            let file =
-                File::open(&path).with_context(|| format!("Could not open: {}", path.display()))?;
-            println!(
-                "{}",
-                blake3::Hasher::new()
-                    .update_reader(file)?
-                    .finalize()
-                    .to_hex()
-            );
+            println!("{}", hash_path(&path)?.to_hex());
         }
         Commands::Store {
             entries_ref,

@@ -64,7 +64,6 @@ A basic version of `btdt` that can be used in most scenarios is working.
 Missing features concern primarily covenience and ease of use:
 
 - Compression of the cache (to reduce the amount of data transferred).
-- Hashing multiple files in a stable way for the cache key.
 - A templating system for cache keys, such that `btdt hash` doesn't need to be called,
   but a cache key in the form of `cache-key-${hashFiles('**/package-lock.json')}` can be used directly.
 - Potentially, using S3 compatible APIs as storage backend.
