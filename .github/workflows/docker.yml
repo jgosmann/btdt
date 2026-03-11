@@ -63,14 +63,14 @@ jobs:
       # https://github.com/docker/metadata-action
       - name: Extract Docker metadata
         id: meta
-        if: ${{ !contains(matrix.skip-for, steps.version-info.outputs.component) }}
+        if: ${{ !contains(matrix.variant.skip-for, steps.version-info.outputs.component) }}
         uses: docker/metadata-action@v5
         with:
           images: ${{ steps.version-info.outputs.image_name }}
 
       - name: Get tags for Docker image
         id: image-tags
-        if: ${{ !contains(matrix.skip-for, steps.version-info.outputs.component) }}
+        if: ${{ !contains(matrix.variant.skip-for, steps.version-info.outputs.component) }}
         shell: bash
         run: |
           echo 'TAGS<<EOF' >> "$GITHUB_OUTPUT"
@@ -87,7 +87,7 @@ jobs:
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
-        if: ${{ !contains(matrix.skip-for, steps.version-info.outputs.component) }}
+        if: ${{ !contains(matrix.variant.skip-for, steps.version-info.outputs.component) }}
         with:
           context: .
           file: ${{ steps.version-info.outputs.component }}.Dockerfile
