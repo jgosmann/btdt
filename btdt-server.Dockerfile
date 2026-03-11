@@ -14,7 +14,7 @@ RUN case ${TARGETARCH} in \
     rustup target add "${RUSTARCH}-unknown-linux-${TARGETABI}" && \
     cargo build --target "${RUSTARCH}-unknown-linux-${TARGETABI}" --bin btdt-server --release && \
     mv target/"${RUSTARCH}-unknown-linux-${TARGETABI}"/release/btdt-server target/btdt-server
-RUN ldd /app/target/release/btdt-server
+RUN ldd /app/target/btdt-server
 RUN case ${TARGETARCH} in \
     arm64) DEBARCH="aarch64" ;; \
     amd64) DEBARCH="x86_64" ;; \
