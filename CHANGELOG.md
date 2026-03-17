@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4](https://github.com/jgosmann/btdt/compare/btdt-cli-v0.4.3...btdt-cli-v0.4.4) - 2026-03-17
+
+### Added
+
+- *(btdt-cli)* Add support for excluding files from cache archive
+- *(btdt)* Add support for excluding files from cache archive
+
+### Other
+
+- Use custom implementation for adding files to archive
+
 ## [0.4.3](https://github.com/jgosmann/btdt/compare/btdt-cli-v0.4.2...btdt-cli-v0.4.3) - 2026-03-11
 
 ### Added
