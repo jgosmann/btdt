@@ -87,6 +87,57 @@ fn test_roundtrip() {
     }
 }
 
+#[test]
+fn test_exclusion() {
+    let tempdir = tempdir().unwrap();
+    let cache_path = tempdir.path().join("cache");
+    let source_path = tempdir.path().join("source-root");
+    let destination_path = tempdir.path().join("destination-root");
+
+    let spec = DirSpec::create_unix_fixture();
+    spec.create(source_path.as_ref()).unwrap();
+    fs::create_dir(&cache_path).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_btdt"))
+        .arg("store")
+        .arg("--cache")
+        .arg(cache_path.to_str().unwrap())
+        .arg("--keys")
+        .arg("cache-key")
+        .arg(&source_path)
+        .arg("--exclude")
+        .arg("dir/exec-file")
+        .arg("--exclude")
+        .arg("symlink")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "store failed, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_btdt"))
+        .arg("restore")
+        .arg("--cache")
+        .arg(cache_path.to_str().unwrap())
+        .arg("--keys")
+        .arg("cache-key")
+        .arg(&destination_path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "restore failed, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert!(destination_path.join("file.txt").exists());
+    assert!(!destination_path.join("symlink").exists());
+    assert!(destination_path.join("dir").exists());
+    assert!(!destination_path.join("dir/exec-file").exists());
+}
+
 struct AuthData {
     _key_dir: TempDir,
     key_path: PathBuf,

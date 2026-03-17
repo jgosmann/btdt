@@ -109,6 +109,11 @@ Path to a file containing the authentication token for accessing a remote cache.
 
 Path to the cache (local directory or remote cache URL).
 
+### `--exclude <EXCLUDE_PATH>`
+
+Path (relative to `<SOURCE_DIR>`) to exclude from the cache.
+This argument can be repeated to specify multiple paths to exclude.
+
 ### `-k <KEYS>`, `--keys <KEYS>`
 
 Comma-separated list of cache keys to store the cached data under.
