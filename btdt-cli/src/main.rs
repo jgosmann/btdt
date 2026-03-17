@@ -99,6 +99,10 @@ enum Commands {
 
         /// Directory to store in the cache.
         source_dir: PathBuf,
+
+        /// Paths to exclude from the cached archive.
+        #[arg(long)]
+        exclude: Vec<PathBuf>,
     },
 }
 
@@ -222,10 +226,11 @@ fn main() -> Result<ExitCode, anyhow::Error> {
         Commands::Store {
             entries_ref,
             source_dir,
+            exclude,
         } => {
             entries_ref
                 .to_pipeline()?
-                .store(&entries_ref.keys(), &source_dir)
+                .store_excluding(&entries_ref.keys(), &source_dir, &exclude)
                 .with_context(|| format!("Could not cache: {}", source_dir.display()))?;
         }
         Commands::Restore {
