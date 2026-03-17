@@ -6,7 +6,7 @@ use crate::error::{IoPathResult, WithPath};
 use crate::util::close::Close;
 use std::fs::File;
 use std::io::{BufWriter, ErrorKind, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tar::{Builder, EntryType, Header};
 
 /// A pipeline defines how multiple files a processed to be stored in the cache.
@@ -80,11 +80,33 @@ impl<C: Cache> Pipeline<C> {
     /// The files in the directory specified by `source` are archived and stored in the cache under
     /// the given keys.
     pub fn store(&mut self, keys: &[&str], source: impl AsRef<Path>) -> IoPathResult<()> {
+        let excludes: [PathBuf; 0] = [];
+        Self::store_excluding(self, keys, source, &excludes)
+    }
+
+    /// Stores the files in the cache.
+    ///
+    /// The files in the directory specified by `source` are archived and stored in the cache under
+    /// the given keys. Paths in `excludes` will be excluded from the archive.
+    pub fn store_excluding(
+        &mut self,
+        keys: &[&str],
+        source: impl AsRef<Path>,
+        excludes: &[impl AsRef<Path>],
+    ) -> IoPathResult<()> {
         let mut writer = BufWriter::new(self.cache.set(keys)?);
         {
             let mut archive = tar::Builder::new(&mut writer);
             archive.follow_symlinks(false);
-            Self::add_dir_to_archive(&mut archive, source.as_ref(), source.as_ref())?;
+            Self::add_dir_to_archive(
+                &mut archive,
+                source.as_ref(),
+                source.as_ref(),
+                &excludes
+                    .iter()
+                    .map(|exclude| source.as_ref().join(exclude))
+                    .collect::<Vec<_>>(),
+            )?;
             archive.finish().with_path(source.as_ref())?;
         }
         writer
@@ -99,6 +121,7 @@ impl<C: Cache> Pipeline<C> {
         archive_builder: &mut Builder<impl Write>,
         path: &Path,
         root: &Path,
+        excludes: &[impl AsRef<Path>],
     ) -> IoPathResult<()> {
         for entry in path.read_dir().with_path(path)? {
             let entry = entry.with_path(path)?;
@@ -106,12 +129,18 @@ impl<C: Cache> Pipeline<C> {
             let archived_path = source_path
                 .strip_prefix(root)
                 .expect("root not a prefix of parth");
+            if excludes
+                .iter()
+                .any(|exclude| exclude.as_ref() == source_path)
+            {
+                continue;
+            }
             let file_type = entry.file_type().with_path(entry.path())?;
             if file_type.is_dir() {
                 archive_builder
                     .append_dir(archived_path, &source_path)
                     .with_path(&source_path)?;
-                Self::add_dir_to_archive(archive_builder, &source_path, root)?;
+                Self::add_dir_to_archive(archive_builder, &source_path, root, excludes)?;
             } else if file_type.is_symlink() {
                 let link_target = std::fs::read_link(&source_path).with_path(&source_path)?;
                 let mut header = Header::new_old();
@@ -167,6 +196,28 @@ mod tests {
         pipeline.restore(&["cache-key"], &destination_path).unwrap();
 
         assert_eq!(spec.compare_with(&destination_path).unwrap(), vec![]);
+    }
+
+    #[test]
+    fn test_exclusion_of_paths() {
+        let cache = LocalCache::new(InMemoryStorage::new());
+        let mut pipeline = Pipeline::new(cache);
+
+        let spec = DirSpec::create_unix_fixture();
+
+        let tempdir = tempdir().unwrap();
+        let source_path = tempdir.path().join("source-root");
+        spec.create(source_path.as_ref()).unwrap();
+        pipeline
+            .store_excluding(&["cache-key"], &source_path, &["symlink", "dir"])
+            .unwrap();
+
+        let destination_path = tempdir.path().join("destination-root");
+        pipeline.restore(&["cache-key"], &destination_path).unwrap();
+
+        assert!(destination_path.join("file.txt").exists());
+        assert!(!destination_path.join("symlink").exists());
+        assert!(!destination_path.join("dir").exists());
     }
 
     #[test]
