@@ -4,8 +4,10 @@
 use crate::cache::Cache;
 use crate::error::{IoPathResult, WithPath};
 use crate::util::close::Close;
-use std::io::BufWriter;
+use std::fs::File;
+use std::io::{BufWriter, ErrorKind, Write};
 use std::path::Path;
+use tar::{Builder, EntryType, Header};
 
 /// A pipeline defines how multiple files a processed to be stored in the cache.
 ///
@@ -82,9 +84,7 @@ impl<C: Cache> Pipeline<C> {
         {
             let mut archive = tar::Builder::new(&mut writer);
             archive.follow_symlinks(false);
-            archive
-                .append_dir_all(".", source.as_ref())
-                .with_path(source.as_ref())?;
+            Self::add_dir_to_archive(&mut archive, source.as_ref(), source.as_ref())?;
             archive.finish().with_path(source.as_ref())?;
         }
         writer
@@ -92,6 +92,47 @@ impl<C: Cache> Pipeline<C> {
             .map_err(|e| e.into())
             .and_then(Close::close)
             .with_path(source.as_ref())?;
+        Ok(())
+    }
+
+    fn add_dir_to_archive(
+        archive_builder: &mut Builder<impl Write>,
+        path: &Path,
+        root: &Path,
+    ) -> IoPathResult<()> {
+        for entry in path.read_dir().with_path(path)? {
+            let entry = entry.with_path(path)?;
+            let source_path = entry.path();
+            let archived_path = source_path
+                .strip_prefix(root)
+                .expect("root not a prefix of parth");
+            let file_type = entry.file_type().with_path(entry.path())?;
+            if file_type.is_dir() {
+                archive_builder
+                    .append_dir(archived_path, &source_path)
+                    .with_path(&source_path)?;
+                Self::add_dir_to_archive(archive_builder, &source_path, root)?;
+            } else if file_type.is_symlink() {
+                let link_target = std::fs::read_link(&source_path).with_path(&source_path)?;
+                let mut header = Header::new_old();
+                header.set_entry_type(EntryType::Symlink);
+                header.set_size(0);
+                archive_builder
+                    .append_link(&mut header, archived_path, link_target)
+                    .with_path(&source_path)?;
+            } else if file_type.is_file() {
+                let mut file = File::open(&source_path).with_path(&source_path)?;
+                archive_builder
+                    .append_file(archived_path, &mut file)
+                    .with_path(entry.path())?;
+            } else {
+                return Err(std::io::Error::new(
+                    ErrorKind::Other,
+                    "Unsupported file type",
+                ))
+                .with_path(entry.path());
+            }
+        }
         Ok(())
     }
 
