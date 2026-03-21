@@ -93,6 +93,9 @@ enum Commands {
     ///
     /// The cached files will be accessible under all specified keys.
     /// Existing keys will be overwritten.
+    ///
+    /// Files named `.btdtignore` can be used to exclude files from the cache. The syntax follows
+    /// the [`.gitignore` specification](https://git-scm.com/docs/gitignore).
     Store {
         #[command(flatten)]
         entries_ref: CacheEntriesRef,

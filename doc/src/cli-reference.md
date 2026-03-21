@@ -98,6 +98,9 @@ btdt store [OPTIONS] --keys <KEYS> --cache <CACHE> <SOURCE_DIR>
 
 Store data from `<SOURCE_DIR>` into the cache under the specified keys.
 
+Files named `.btdtignore` can be used to exclude files from the cache. The syntax follows
+the [`.gitignore` specification](https://git-scm.com/docs/gitignore).
+
 ### `-a <AUTH_TOKEN_FILE>`, `--auth-token-file <AUTH_TOKEN_FILE>`
 
 Path to a file containing the authentication token for accessing a remote cache.
