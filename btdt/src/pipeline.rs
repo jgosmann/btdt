@@ -4,6 +4,7 @@
 use crate::cache::Cache;
 use crate::error::{IoPathError, IoPathResult, WithPath};
 use crate::util::close::Close;
+use ignore::overrides::Override;
 use ignore::{Error, WalkBuilder};
 use std::fs::File;
 use std::io;
@@ -85,11 +86,27 @@ impl<C: Cache> Pipeline<C> {
     /// Files named `.btdtignore` can be used to exclude files from the cache. The syntax follows
     /// the [`.gitignore` specification](https://git-scm.com/docs/gitignore).
     pub fn store(&mut self, keys: &[&str], source: impl AsRef<Path>) -> IoPathResult<()> {
+        self.store_with_overrides(keys, source, Override::empty())
+    }
+
+    /// Stores the files in the cache.
+    ///
+    /// The files in the directory specified by `source` are archived and stored in the cache under
+    /// the given keys.
+    ///
+    /// Files named `.btdtignore` can be used to exclude files from the cache. The syntax follows
+    /// the [`.gitignore` specification](https://git-scm.com/docs/gitignore).
+    pub fn store_with_overrides(
+        &mut self,
+        keys: &[&str],
+        source: impl AsRef<Path>,
+        overrides: Override,
+    ) -> IoPathResult<()> {
         let mut writer = BufWriter::new(self.cache.set(keys)?);
         {
             let mut archive = tar::Builder::new(&mut writer);
             archive.follow_symlinks(false);
-            Self::add_dir_to_archive(&mut archive, source.as_ref())?;
+            Self::add_dir_to_archive(&mut archive, source.as_ref(), overrides)?;
             archive.finish().with_path(source.as_ref())?;
         }
         writer
@@ -103,11 +120,13 @@ impl<C: Cache> Pipeline<C> {
     fn add_dir_to_archive(
         archive_builder: &mut Builder<impl Write>,
         root: &Path,
+        overrides: Override,
     ) -> IoPathResult<()> {
         let walker = WalkBuilder::new(root)
             .follow_links(false)
             .standard_filters(false)
             .add_custom_ignore_filename(".btdtignore")
+            .overrides(overrides)
             .build();
 
         for entry in walker {
@@ -161,10 +180,21 @@ mod tests {
     use crate::cache::local::LocalCache;
     use crate::storage::in_memory::InMemoryStorage;
     use crate::test_util::fs_spec::{DirSpec, FileSpec, Node};
+    use ignore::overrides::OverrideBuilder;
     use std::fs;
     use std::fs::Permissions;
     use std::os::unix::fs::PermissionsExt;
     use tempfile::tempdir;
+
+    fn file_with_name(name: &str) -> (String, Box<dyn Node>) {
+        (
+            name.to_string(),
+            Box::new(FileSpec {
+                permissions: Permissions::from_mode(0o644),
+                content: vec![],
+            }) as Box<dyn Node>,
+        )
+    }
 
     #[test]
     fn test_roundtrip() {
@@ -188,16 +218,6 @@ mod tests {
     fn test_respects_btdtignore_files() {
         let cache = LocalCache::new(InMemoryStorage::new());
         let mut pipeline = Pipeline::new(cache);
-
-        fn file_with_name(name: &str) -> (String, Box<dyn Node>) {
-            (
-                name.to_string(),
-                Box::new(FileSpec {
-                    permissions: Permissions::from_mode(0o644),
-                    content: vec![],
-                }) as Box<dyn Node>,
-            )
-        }
 
         let spec = DirSpec {
             permissions: Permissions::from_mode(0o755),
@@ -369,6 +389,41 @@ subpath/**/ignore
         pipeline.restore(&["cache-key"], &destination_path).unwrap();
 
         assert_eq!(spec.compare_with(&destination_path).unwrap(), vec![]);
+    }
+
+    #[test]
+    fn test_store_with_overrides() {
+        let cache = LocalCache::new(InMemoryStorage::new());
+        let mut pipeline = Pipeline::new(cache);
+
+        let spec = DirSpec {
+            permissions: Permissions::from_mode(0o755),
+            children: [file_with_name("some-file"), file_with_name("ignore")]
+                .into_iter()
+                .collect(),
+        };
+        let expected = DirSpec {
+            permissions: Permissions::from_mode(0o755),
+            children: [file_with_name("some-file")].into_iter().collect(),
+        };
+
+        let tempdir = tempdir().unwrap();
+        let source_path = tempdir.path().join("source-root");
+        spec.create(source_path.as_ref()).unwrap();
+
+        let overrides = OverrideBuilder::new(&source_path)
+            .add("!ignore")
+            .unwrap()
+            .build()
+            .unwrap();
+        pipeline
+            .store_with_overrides(&["cache-key"], &source_path, overrides)
+            .unwrap();
+
+        let destination_path = tempdir.path().join("destination-root");
+        pipeline.restore(&["cache-key"], &destination_path).unwrap();
+
+        assert_eq!(expected.compare_with(&destination_path).unwrap(), vec![]);
     }
 
     #[test]
