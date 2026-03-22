@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-55a29348.js";
+            window.path_to_searchindex_js = "searchindex-1cfe71d3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-89348b07.js"></script>
@@ -239,6 +239,8 @@ is returned if another key was restored.</p>
 <pre><code class="language-sh">btdt store [OPTIONS] --keys &lt;KEYS&gt; --cache &lt;CACHE&gt; &lt;SOURCE_DIR&gt;
 </code></pre>
 <p>Store data from <code>&lt;SOURCE_DIR&gt;</code> into the cache under the specified keys.</p>
+<p>Files named <code>.btdtignore</code> can be used to exclude files from the cache. The syntax follows
+the <a href="https://git-scm.com/docs/gitignore"><code>.gitignore</code> specification</a>.</p>
 <h3 id="-a-auth_token_file---auth-token-file-auth_token_file-1"><a class="header" href="#-a-auth_token_file---auth-token-file-auth_token_file-1"><code>-a &lt;AUTH_TOKEN_FILE&gt;</code>, <code>--auth-token-file &lt;AUTH_TOKEN_FILE&gt;</code></a></h3>
 <p>Path to a file containing the authentication token for accessing a remote cache.</p>
 <blockquote class="blockquote-tag blockquote-tag-important">
