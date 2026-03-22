@@ -11,6 +11,7 @@ use btdt::pipeline::Pipeline;
 use btdt::storage::filesystem::FilesystemStorage;
 use btdt::util::humanbytes;
 use clap::{Args, Parser, Subcommand};
+use ignore::overrides::OverrideBuilder;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -102,6 +103,16 @@ enum Commands {
 
         /// Directory to store in the cache.
         source_dir: PathBuf,
+
+        /// Paths to exclude from the cached archive.
+        ///
+        /// This follows the [`.gitignore` syntax](https://git-scm.com/docs/gitignore) of a single
+        /// line. The argument can be repeated to specify multiple excludes. Prefix the value with
+        /// `!` to include an otherwise excluded file. Note, if a directory is excluded via the
+        /// command line flag, any path below it will be ignored even if it is explicitly included
+        /// with `--exclude !dir/subpath`.
+        #[arg(long)]
+        exclude: Vec<String>,
     },
 }
 
@@ -225,10 +236,30 @@ fn main() -> Result<ExitCode, anyhow::Error> {
         Commands::Store {
             entries_ref,
             source_dir,
+            exclude,
         } => {
+            let mut override_builder = OverrideBuilder::new(&source_dir);
+            for exclude_glob in exclude {
+                if let Some(inverted) = exclude_glob.strip_prefix('!') {
+                    override_builder
+                        .add(inverted)
+                        .with_context(|| "Invalid exclude glob")?;
+                } else {
+                    override_builder
+                        .add(&format!("!{exclude_glob}"))
+                        .with_context(|| "Invalid exclude glob")?;
+                }
+            }
+
             entries_ref
                 .to_pipeline()?
-                .store(&entries_ref.keys(), &source_dir)
+                .store_with_overrides(
+                    &entries_ref.keys(),
+                    &source_dir,
+                    override_builder
+                        .build()
+                        .with_context(|| "Invalid exclude globs")?,
+                )
                 .with_context(|| format!("Could not cache: {}", source_dir.display()))?;
         }
         Commands::Restore {
