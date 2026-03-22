@@ -1,14 +1,14 @@
 use crate::cache_fixture::CacheFixture;
 use biscuit_auth::KeyPair;
 use biscuit_auth::macros::biscuit;
-use btdt::test_util::fs_spec::{DirSpec, Node};
+use btdt::test_util::fs_spec::{DirSpec, FileSpec, Node};
 use btdt_server_lib::test_server::{BtdtTestServer, CERTIFICATE_PEM, CERTIFICATE_PKCS12};
 use serial_test::serial;
 use std::collections::BTreeMap;
 use std::fs;
-use std::fs::OpenOptions;
+use std::fs::{OpenOptions, Permissions};
 use std::io::Write;
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::PathBuf;
 use std::process::Command;
 use tempfile::{NamedTempFile, TempDir, tempdir};
@@ -85,6 +85,94 @@ fn test_roundtrip() {
         );
         assert_eq!(spec.compare_with(&destination_path).unwrap(), vec![]);
     }
+}
+
+#[test]
+fn test_include_and_exclude_args() {
+    let tempdir = tempdir().unwrap();
+    let cache_path = tempdir.path().join("cache");
+    let source_path = tempdir.path().join("source-root");
+    let destination_path = tempdir.path().join("destination-root");
+
+    let spec = DirSpec {
+        permissions: Permissions::from_mode(0o755),
+        children: [(
+            "dir".to_string(),
+            Box::new(DirSpec {
+                permissions: Permissions::from_mode(0o755),
+                children: [
+                    (
+                        "included-file".to_string(),
+                        Box::new(FileSpec::default()) as Box<dyn Node>,
+                    ),
+                    (
+                        "excluded-file".to_string(),
+                        Box::new(FileSpec::default()) as Box<dyn Node>,
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+            }) as Box<dyn Node>,
+        )]
+        .into_iter()
+        .collect(),
+    };
+    let expected = DirSpec {
+        permissions: Permissions::from_mode(0o755),
+        children: [(
+            "dir".to_string(),
+            Box::new(DirSpec {
+                permissions: Permissions::from_mode(0o755),
+                children: [(
+                    "included-file".to_string(),
+                    Box::new(FileSpec::default()) as Box<dyn Node>,
+                )]
+                .into_iter()
+                .collect(),
+            }) as Box<dyn Node>,
+        )]
+        .into_iter()
+        .collect(),
+    };
+
+    spec.create(source_path.as_ref()).unwrap();
+    fs::create_dir(&cache_path).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_btdt"))
+        .arg("store")
+        .arg("--cache")
+        .arg(cache_path.to_str().unwrap())
+        .arg("--exclude")
+        .arg("dir/*")
+        .arg("--exclude")
+        .arg("!included-file")
+        .arg("--keys")
+        .arg("cache-key")
+        .arg(&source_path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "store failed, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    println!("{}", String::from_utf8_lossy(&output.stdout));
+
+    let output = Command::new(env!("CARGO_BIN_EXE_btdt"))
+        .arg("restore")
+        .arg("--cache")
+        .arg(cache_path.to_str().unwrap())
+        .arg("--keys")
+        .arg("cache-key")
+        .arg(&destination_path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "restore failed, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(expected.compare_with(&destination_path).unwrap(), vec![]);
 }
 
 struct AuthData {

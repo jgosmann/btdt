@@ -26,6 +26,7 @@ humantime = "2.1.0"
 chrono = "0.4.39"
 url = "2.5.7"
 biscuit-auth = "6.0.0"
+ignore = "0.4.25"
 
 [dev-dependencies]
 btdt-server = { path = "../btdt-server", features = ["test"] }

@@ -239,6 +239,15 @@ impl Node for FileSpec {
     }
 }
 
+impl Default for FileSpec {
+    fn default() -> Self {
+        Self {
+            permissions: Permissions::from_mode(0o644),
+            content: Vec::new(),
+        }
+    }
+}
+
 impl DirSpec {
     /// Creates a filesystem tree specification to serve as test fixture on Unix systems.
     ///

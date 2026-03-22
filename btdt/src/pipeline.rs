@@ -2,10 +2,13 @@
 //! them in TAR format and potentially compressing them.
 
 use crate::cache::Cache;
-use crate::error::{IoPathResult, WithPath};
+use crate::error::{IoPathError, IoPathResult, WithPath};
 use crate::util::close::Close;
+use ignore::overrides::Override;
+use ignore::{Error, WalkBuilder};
 use std::fs::File;
-use std::io::{BufWriter, ErrorKind, Write};
+use std::io;
+use std::io::{BufWriter, Write};
 use std::path::Path;
 use tar::{Builder, EntryType, Header};
 
@@ -79,12 +82,31 @@ impl<C: Cache> Pipeline<C> {
     ///
     /// The files in the directory specified by `source` are archived and stored in the cache under
     /// the given keys.
+    ///
+    /// Files named `.btdtignore` can be used to exclude files from the cache. The syntax follows
+    /// the [`.gitignore` specification](https://git-scm.com/docs/gitignore).
     pub fn store(&mut self, keys: &[&str], source: impl AsRef<Path>) -> IoPathResult<()> {
+        self.store_with_overrides(keys, source, Override::empty())
+    }
+
+    /// Stores the files in the cache.
+    ///
+    /// The files in the directory specified by `source` are archived and stored in the cache under
+    /// the given keys.
+    ///
+    /// Files named `.btdtignore` can be used to exclude files from the cache. The syntax follows
+    /// the [`.gitignore` specification](https://git-scm.com/docs/gitignore).
+    pub fn store_with_overrides(
+        &mut self,
+        keys: &[&str],
+        source: impl AsRef<Path>,
+        overrides: Override,
+    ) -> IoPathResult<()> {
         let mut writer = BufWriter::new(self.cache.set(keys)?);
         {
             let mut archive = tar::Builder::new(&mut writer);
             archive.follow_symlinks(false);
-            Self::add_dir_to_archive(&mut archive, source.as_ref(), source.as_ref())?;
+            Self::add_dir_to_archive(&mut archive, source.as_ref(), overrides)?;
             archive.finish().with_path(source.as_ref())?;
         }
         writer
@@ -97,40 +119,50 @@ impl<C: Cache> Pipeline<C> {
 
     fn add_dir_to_archive(
         archive_builder: &mut Builder<impl Write>,
-        path: &Path,
         root: &Path,
+        overrides: Override,
     ) -> IoPathResult<()> {
-        for entry in path.read_dir().with_path(path)? {
-            let entry = entry.with_path(path)?;
+        let walker = WalkBuilder::new(root)
+            .follow_links(false)
+            .standard_filters(false)
+            .add_custom_ignore_filename(".btdtignore")
+            .overrides(overrides)
+            .build();
+
+        for entry in walker {
+            let entry = entry.map_err(|err| match err {
+                Error::WithPath { path, err } => IoPathError::new(io::Error::other(err), path),
+                err => IoPathError::new_no_path(io::Error::other(err)),
+            })?;
+
             let source_path = entry.path();
+            if source_path == root {
+                continue;
+            }
             let archived_path = source_path
                 .strip_prefix(root)
                 .expect("root not a prefix of parth");
-            let file_type = entry.file_type().with_path(entry.path())?;
+
+            let file_type = entry.file_type().expect("file type should be available");
             if file_type.is_dir() {
                 archive_builder
-                    .append_dir(archived_path, &source_path)
-                    .with_path(&source_path)?;
-                Self::add_dir_to_archive(archive_builder, &source_path, root)?;
+                    .append_dir(archived_path, source_path)
+                    .with_path(source_path)?;
             } else if file_type.is_symlink() {
-                let link_target = std::fs::read_link(&source_path).with_path(&source_path)?;
+                let link_target = std::fs::read_link(source_path).with_path(source_path)?;
                 let mut header = Header::new_old();
                 header.set_entry_type(EntryType::Symlink);
                 header.set_size(0);
                 archive_builder
                     .append_link(&mut header, archived_path, link_target)
-                    .with_path(&source_path)?;
+                    .with_path(source_path)?;
             } else if file_type.is_file() {
-                let mut file = File::open(&source_path).with_path(&source_path)?;
+                let mut file = File::open(source_path).with_path(source_path)?;
                 archive_builder
                     .append_file(archived_path, &mut file)
                     .with_path(entry.path())?;
             } else {
-                return Err(std::io::Error::new(
-                    ErrorKind::Other,
-                    "Unsupported file type",
-                ))
-                .with_path(entry.path());
+                return Err(io::Error::other("Unsupported file type")).with_path(entry.path());
             }
         }
         Ok(())
@@ -147,9 +179,22 @@ mod tests {
     use super::*;
     use crate::cache::local::LocalCache;
     use crate::storage::in_memory::InMemoryStorage;
-    use crate::test_util::fs_spec::{DirSpec, Node};
+    use crate::test_util::fs_spec::{DirSpec, FileSpec, Node};
+    use ignore::overrides::OverrideBuilder;
     use std::fs;
+    use std::fs::Permissions;
+    use std::os::unix::fs::PermissionsExt;
     use tempfile::tempdir;
+
+    fn file_with_name(name: &str) -> (String, Box<dyn Node>) {
+        (
+            name.to_string(),
+            Box::new(FileSpec {
+                permissions: Permissions::from_mode(0o644),
+                content: vec![],
+            }) as Box<dyn Node>,
+        )
+    }
 
     #[test]
     fn test_roundtrip() {
@@ -167,6 +212,218 @@ mod tests {
         pipeline.restore(&["cache-key"], &destination_path).unwrap();
 
         assert_eq!(spec.compare_with(&destination_path).unwrap(), vec![]);
+    }
+
+    #[test]
+    fn test_respects_btdtignore_files() {
+        let cache = LocalCache::new(InMemoryStorage::new());
+        let mut pipeline = Pipeline::new(cache);
+
+        let spec = DirSpec {
+            permissions: Permissions::from_mode(0o755),
+            children: [
+                (
+                    ".btdtignore".to_string(),
+                    Box::new(FileSpec {
+                        permissions: Permissions::from_mode(0o644),
+                        content: b"
+# comment
+/ignore-root-only
+ignore-everywhere
+ignore-only-dir/
+ignore-*-wildcard
+subpath/**/ignore
+!**/include
+                "
+                        .to_vec(),
+                    }) as Box<dyn Node>,
+                ),
+                file_with_name("some-file"),
+                file_with_name(".hidden-file"),
+                file_with_name("include"),
+                file_with_name("ignore-root-only"),
+                file_with_name("ignore-everywhere"),
+                file_with_name("ignore-foo-wildcard"),
+                file_with_name("ignore-with-local-ignore-file"),
+                (
+                    "ignore-only-dir".to_string(),
+                    Box::new(DirSpec {
+                        permissions: Permissions::from_mode(0o755),
+                        children: [file_with_name("foo"), file_with_name("include")]
+                            .into_iter()
+                            .collect(),
+                    }) as Box<dyn Node>,
+                ),
+                (
+                    "subpath".to_string(),
+                    Box::new(DirSpec {
+                        permissions: Permissions::from_mode(0o755),
+                        children: [
+                            file_with_name("ignore-root-only"),
+                            file_with_name("ignore-everywhere"),
+                            file_with_name("ignore-only-dir"),
+                            file_with_name("ignore-with-local-ignore-file"),
+                            (
+                                ".btdtignore".to_string(),
+                                Box::new(FileSpec {
+                                    permissions: Permissions::from_mode(0o644),
+                                    content: b"ignore-with-local-ignore-file".to_vec(),
+                                }) as Box<dyn Node>,
+                            ),
+                            (
+                                "subsubpath".to_string(),
+                                Box::new(DirSpec {
+                                    permissions: Permissions::from_mode(0o755),
+                                    children: [file_with_name("foo"), file_with_name("ignore")]
+                                        .into_iter()
+                                        .collect(),
+                                }) as Box<dyn Node>,
+                            ),
+                        ]
+                        .into_iter()
+                        .collect(),
+                    }) as Box<dyn Node>,
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        };
+        let expected = DirSpec {
+            permissions: Permissions::from_mode(0o755),
+            children: [
+                (
+                    ".btdtignore".to_string(),
+                    Box::new(FileSpec {
+                        permissions: Permissions::from_mode(0o644),
+                        content: b"
+# comment
+/ignore-root-only
+ignore-everywhere
+ignore-only-dir/
+ignore-*-wildcard
+subpath/**/ignore
+!**/include
+                "
+                        .to_vec(),
+                    }) as Box<dyn Node>,
+                ),
+                file_with_name("some-file"),
+                file_with_name(".hidden-file"),
+                file_with_name("include"),
+                file_with_name("ignore-with-local-ignore-file"),
+                (
+                    "subpath".to_string(),
+                    Box::new(DirSpec {
+                        permissions: Permissions::from_mode(0o755),
+                        children: [
+                            file_with_name("ignore-root-only"),
+                            file_with_name("ignore-only-dir"),
+                            (
+                                ".btdtignore".to_string(),
+                                Box::new(FileSpec {
+                                    permissions: Permissions::from_mode(0o644),
+                                    content: b"ignore-with-local-ignore-file".to_vec(),
+                                }) as Box<dyn Node>,
+                            ),
+                            (
+                                "subsubpath".to_string(),
+                                Box::new(DirSpec {
+                                    permissions: Permissions::from_mode(0o755),
+                                    children: [file_with_name("foo")].into_iter().collect(),
+                                }) as Box<dyn Node>,
+                            ),
+                        ]
+                        .into_iter()
+                        .collect(),
+                    }) as Box<dyn Node>,
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        };
+
+        let tempdir = tempdir().unwrap();
+        let source_path = tempdir.path().join("source-root");
+        spec.create(source_path.as_ref()).unwrap();
+        pipeline.store(&["cache-key"], &source_path).unwrap();
+
+        let destination_path = tempdir.path().join("destination-root");
+        pipeline.restore(&["cache-key"], &destination_path).unwrap();
+
+        assert_eq!(expected.compare_with(&destination_path).unwrap(), vec![]);
+    }
+
+    #[test]
+    fn test_does_not_use_gitignore_files() {
+        let cache = LocalCache::new(InMemoryStorage::new());
+        let mut pipeline = Pipeline::new(cache);
+
+        let spec = DirSpec {
+            permissions: Permissions::from_mode(0o755),
+            children: [
+                (
+                    ".gitignore".to_string(),
+                    Box::new(FileSpec {
+                        permissions: Permissions::from_mode(0o644),
+                        content: b"do-not-ignore".to_vec(),
+                    }) as Box<dyn Node>,
+                ),
+                (
+                    "do-not-ignore".to_string(),
+                    Box::new(FileSpec {
+                        permissions: Permissions::from_mode(0o644),
+                        content: vec![],
+                    }) as Box<dyn Node>,
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        };
+
+        let tempdir = tempdir().unwrap();
+        let source_path = tempdir.path().join("source-root");
+        spec.create(source_path.as_ref()).unwrap();
+        pipeline.store(&["cache-key"], &source_path).unwrap();
+
+        let destination_path = tempdir.path().join("destination-root");
+        pipeline.restore(&["cache-key"], &destination_path).unwrap();
+
+        assert_eq!(spec.compare_with(&destination_path).unwrap(), vec![]);
+    }
+
+    #[test]
+    fn test_store_with_overrides() {
+        let cache = LocalCache::new(InMemoryStorage::new());
+        let mut pipeline = Pipeline::new(cache);
+
+        let spec = DirSpec {
+            permissions: Permissions::from_mode(0o755),
+            children: [file_with_name("some-file"), file_with_name("ignore")]
+                .into_iter()
+                .collect(),
+        };
+        let expected = DirSpec {
+            permissions: Permissions::from_mode(0o755),
+            children: [file_with_name("some-file")].into_iter().collect(),
+        };
+
+        let tempdir = tempdir().unwrap();
+        let source_path = tempdir.path().join("source-root");
+        spec.create(source_path.as_ref()).unwrap();
+
+        let overrides = OverrideBuilder::new(&source_path)
+            .add("!ignore")
+            .unwrap()
+            .build()
+            .unwrap();
+        pipeline
+            .store_with_overrides(&["cache-key"], &source_path, overrides)
+            .unwrap();
+
+        let destination_path = tempdir.path().join("destination-root");
+        pipeline.restore(&["cache-key"], &destination_path).unwrap();
+
+        assert_eq!(expected.compare_with(&destination_path).unwrap(), vec![]);
     }
 
     #[test]
