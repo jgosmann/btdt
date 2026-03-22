@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4](https://github.com/jgosmann/btdt/compare/btdt-cli-v0.4.3...btdt-cli-v0.4.4) - 2026-03-22
+
+### Added
+
+- Add `--exclude` flag to btdt-cli
+- Add support for `.btdtignore` files
+- Add store_with_overrides function to pipeline
+
+### Other
+
+- Use custom implementation for adding files to archive
+
 ## [0.4.3](https://github.com/jgosmann/btdt/compare/btdt-cli-v0.4.2...btdt-cli-v0.4.3) - 2026-03-11
 
 ### Added
