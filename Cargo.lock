@@ -288,7 +288,7 @@ dependencies = [
 
 [[package]]
 name = "btdt"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "biscuit-auth",
  "blake3",
@@ -312,7 +312,7 @@ dependencies = [
 
 [[package]]
 name = "btdt-cli"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "anyhow",
  "biscuit-auth",
@@ -332,7 +332,7 @@ dependencies = [
 
 [[package]]
 name = "btdt-server"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "biscuit-auth",
  "btdt",
