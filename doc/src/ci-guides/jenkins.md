@@ -9,7 +9,7 @@ or a remote cache using a `btdt-server` instance.
 
 For an agent-local setup, you only need to [install the `btdt` CLI](../install.md) on your Jenkins agents.
 Then you can integrate `btdt` commands into your pipeline script as described
-in [Getting Started](../getting_started.md).
+in [Getting Started](../getting-started.md).
 Ensure that the cache path you use is writable by the Jenkins agent user.
 
 An example `Jenkinsfile` could look like this:
@@ -26,8 +26,10 @@ pipeline {
                 sh '''
                     CACHE_PATH=/var/lib/btdt/cache  # Path to cache on the Jenkins agent
                     CACHE_KEY=cache-key-$(btdt hash package-lock.json)
+                    set +e  # Jenkins runs sh with -e, but a cache miss exits non-zero
                     btdt restore --cache "$CACHE_PATH" --keys $CACHE_KEY node_modules
                     RESTORE_EXIT_CODE=$?
+                    set -e
                     if [ $RESTORE_EXIT_CODE -ne 0 ]; then
                         npm ci  # Install dependencies
                         btdt store --cache "$CACHE_PATH" --keys $CACHE_KEY node_modules
@@ -48,7 +50,7 @@ pipeline {
 
 To prevent the local cache from growing indefinitely, you can set up a periodic cleanup job in Jenkins.
 For each agent, create a new Jenkins pipeline job that runs periodically (e.g., daily or weekly)
-and add a stage that runs the `btdt cleanup` command on the cache path.
+and add a stage that runs the `btdt clean` command on the cache path.
 For example:
 
 ```groovy
@@ -65,7 +67,7 @@ pipeline {
             steps {
                 sh '''
                     CACHE_PATH=/var/lib/btdt/cache  # Path to cache on the Jenkins agent
-                    btdt cleanup --cache "$CACHE_PATH" --max-age 7d --max-size 10G
+                    btdt clean --cache "$CACHE_PATH" --max-age 7d --max-size 10G
                 '''
             }
         }
@@ -83,7 +85,7 @@ and [an authorization token generated](../btdt-server/authorization.md).
 Provide the authorization token as "secret file" credential in Jenkins ("Manage Jenkins" → "Credentials").
 
 Then you can integrate `btdt` commands into your pipeline script as described
-in [Getting Started](../getting_started.md),
+in [Getting Started](../getting-started.md),
 using the remote cache URL and an authentication token file provided from the Jenkins credential.
 
 An example `Jenkinsfile` could look like this:
@@ -102,14 +104,16 @@ pipeline {
                             file(credentialsId: 'btdt-auth-token', variable: 'BTDT_AUTH_TOKEN_FILE'),
                     ]) {
                         sh '''
-                            CACHE_URL=http://btdt.example.com:8707/api/caches/my-cache
+                            CACHE_URL=https://btdt.example.com:8707/api/caches/my-cache
                             CACHE_KEY=cache-key-$(btdt hash package-lock.json)
+                            set +e  # Jenkins runs sh with -e, but a cache miss exits non-zero
                             btdt restore \\
                               --cache "$CACHE_URL" \\
                               --auth-token-file "$BTDT_AUTH_TOKEN_FILE" \\
                               --keys $CACHE_KEY \\
                               node_modules
                             RESTORE_EXIT_CODE=$?
+                            set -e
                             if [ $RESTORE_EXIT_CODE -ne 0 ]; then
                                 npm ci  # Install dependencies
                                 btdt store \\
@@ -122,10 +126,10 @@ pipeline {
                     }
                 }
             }
-            stage('Run tests') {
-                steps {
-                    // ...
-                }
+        }
+        stage('Run tests') {
+            steps {
+                // ...
             }
         }
     }

@@ -131,9 +131,6 @@ spec:
         # run tests, build, etc.
 ```
 
-Note, if you are using [fallback keys](../getting_started.md#using-multiple-cache-keys), you would always want to run
-`npm ci` to ensure that the dependencies are installed correctly.
-
 ### Store the cache
 
 For the cache to provide a benefit, we need to fill it if a cache miss occurred. This requires an additional step
