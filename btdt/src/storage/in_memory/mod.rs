@@ -180,6 +180,10 @@ impl Storage for InMemoryStorage {
                         Node::Dir(dir) => dir.size() as u64,
                         Node::File(file) => file.size() as u64,
                     },
+                    modified: match node {
+                        Node::Dir(_) => None,
+                        Node::File(file) => Some(file.modified()),
+                    },
                 })
             })
             .collect::<Vec<_>>()

@@ -6,7 +6,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,no_run
 //! use btdt::util::http::{HttpClient, Url};
 //! use std::io::{Read, Write};
 //!

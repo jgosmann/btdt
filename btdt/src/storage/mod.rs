@@ -9,6 +9,7 @@ pub mod tests;
 
 use super::util::close::Close;
 use crate::error::IoPathResult;
+use chrono::{DateTime, Utc};
 use std::borrow::Cow;
 use std::io::{Read, Write};
 
@@ -88,4 +89,8 @@ pub struct StorageEntry<'a> {
     ///
     /// This is `0` for directories.
     pub size: u64,
+    /// The time the entry was last modified.
+    ///
+    /// This is `None` for directories.
+    pub modified: Option<DateTime<Utc>>,
 }

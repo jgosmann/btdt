@@ -86,47 +86,53 @@ macro_rules! test_storage {
                 write_file_to_storage(&storage, "/dir/subdir/subfile.txt", "subfile-content")
                     .unwrap();
 
-                let mut entries: Vec<_> = storage.list("/").unwrap().map(Result::unwrap).collect();
-                entries.sort_unstable_by_key(|entry| entry.name.to_string());
+                let list_sorted = |path| {
+                    let mut entries: Vec<_> = storage
+                        .list(path)
+                        .unwrap()
+                        .map(Result::unwrap)
+                        .map(|entry| (entry.entry_type, entry.name.to_string(), entry.size))
+                        .collect();
+                    entries.sort_unstable_by(|a, b| a.1.cmp(&b.1));
+                    entries
+                };
                 assert_eq!(
-                    entries,
+                    list_sorted("/"),
                     vec![
-                        StorageEntry {
-                            entry_type: EntryType::Directory,
-                            name: Cow::Owned("dir".to_string()),
-                            size: 0,
-                        },
-                        StorageEntry {
-                            entry_type: EntryType::File,
-                            name: Cow::Owned("rootfile.txt".to_string()),
-                            size: 16,
-                        }
+                        (EntryType::Directory, "dir".to_string(), 0),
+                        (EntryType::File, "rootfile.txt".to_string(), 16),
                     ]
                 );
+                assert_eq!(
+                    list_sorted("/dir"),
+                    vec![
+                        (EntryType::File, "file1.txt".to_string(), 13),
+                        (EntryType::File, "file2.txt".to_string(), 13),
+                        (EntryType::Directory, "subdir".to_string(), 0),
+                    ]
+                );
+            }
+
+            #[test]
+            fn test_list_returns_time_of_last_write_for_files() {
+                // Filesystem timestamps may lag behind the system clock by a few milliseconds.
+                let tolerance = chrono::TimeDelta::seconds(1);
+                let storage = $constructor;
+                let before = chrono::Utc::now();
+                write_file_to_storage(&storage, "/dir/file.txt", "Hello, world!").unwrap();
+                write_file_to_storage(&storage, "/dir/subdir/file.txt", "Hello, world!").unwrap();
+                let after = chrono::Utc::now();
 
                 let mut entries: Vec<_> =
                     storage.list("/dir").unwrap().map(Result::unwrap).collect();
                 entries.sort_unstable_by_key(|entry| entry.name.to_string());
-                assert_eq!(
-                    entries,
-                    vec![
-                        StorageEntry {
-                            entry_type: EntryType::File,
-                            name: Cow::Owned("file1.txt".to_string()),
-                            size: 13,
-                        },
-                        StorageEntry {
-                            entry_type: EntryType::File,
-                            name: Cow::Owned("file2.txt".to_string()),
-                            size: 13,
-                        },
-                        StorageEntry {
-                            entry_type: EntryType::Directory,
-                            name: Cow::Owned("subdir".to_string()),
-                            size: 0,
-                        },
-                    ]
+
+                let modified = entries[0].modified.unwrap();
+                assert!(
+                    before - tolerance <= modified && modified <= after + tolerance,
+                    "expected {modified} to be between {before} and {after}"
                 );
+                assert_eq!(entries[1].modified, None);
             }
 
             #[test]

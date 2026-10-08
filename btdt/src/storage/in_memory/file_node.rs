@@ -1,15 +1,20 @@
+use chrono::{DateTime, Utc};
 use std::io;
 use std::io::{Read, Write};
 use std::sync::{Arc, RwLock};
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct FileNode {
     content: RwLock<Vec<u8>>,
+    modified: RwLock<DateTime<Utc>>,
 }
 
 impl FileNode {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            content: RwLock::new(Vec::new()),
+            modified: RwLock::new(Utc::now()),
+        }
     }
 
     pub fn reader(self: &Arc<FileNode>) -> FileReader {
@@ -22,6 +27,10 @@ impl FileNode {
 
     pub fn size(&self) -> usize {
         self.content.read().unwrap().len()
+    }
+
+    pub fn modified(&self) -> DateTime<Utc> {
+        *self.modified.read().unwrap()
     }
 }
 
@@ -38,6 +47,7 @@ impl FileWriter {
 
 impl Write for FileWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        *self.file_node.modified.write().unwrap() = Utc::now();
         self.file_node.content.write().unwrap().write(buf)
     }
 

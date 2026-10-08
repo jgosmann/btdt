@@ -17,6 +17,10 @@ use std::io::{ErrorKind, Read, Write};
 use std::ops::Deref;
 use std::pin::Pin;
 
+/// A blob is written before the meta files referencing it. Unreferenced blobs younger than this
+/// are kept because their meta files might still be in the process of being written.
+const UNREFERENCED_BLOB_GRACE_PERIOD: TimeDelta = TimeDelta::hours(1);
+
 /// A local cache that stores data in a storage backend.
 ///
 /// Note that the storage backend itself could store data remotely, despite the cache being
@@ -165,14 +169,14 @@ impl<S: Storage, C: Clock, R: RngBytes> LocalCache<S, C, R> {
             return Ok(());
         }
 
-        let mut blob_sizes = HashMap::new();
+        let mut blob_files = HashMap::new();
         for blob in Self::iter_subdir_files(&self.storage, "/blob")? {
             let blob = blob?;
             if let Ok(blob_id) = ICASE_NOPAD_ALPHANUMERIC_ENCODING
                 .decode(format!("{}{}", blob.subdir, blob.name).as_bytes())
             {
                 let blob_id: BlobId = blob_id.try_into().unwrap();
-                blob_sizes.insert(blob_id, blob.size);
+                blob_files.insert(blob_id, blob);
             }
         }
 
@@ -187,19 +191,32 @@ impl<S: Storage, C: Clock, R: RngBytes> LocalCache<S, C, R> {
 
         for key_file in Self::iter_subdir_files(&self.storage, "/meta")? {
             let key_file = key_file?;
-            let meta = self.read_meta(&key_file.path)?;
+            let Some(meta) = ignore_not_found(self.read_meta(&key_file.path))? else {
+                continue;
+            };
             let latest_access = meta.latest_access().map_err(|err| {
                 IoPathError::new_no_path(io::Error::new(ErrorKind::InvalidData, format!("{err:?}")))
             })?;
-            if let Some(&size) = blob_sizes.get(meta.blob_id()) {
+            if let Some(blob_file) = blob_files.get(meta.blob_id()) {
                 let entry = blobs.entry(*meta.blob_id()).or_insert_with(|| Blob {
                     latest_access: Reverse(latest_access),
-                    size,
+                    size: blob_file.size,
                     blob_id: *meta.blob_id(),
                     keys: vec![],
                 });
                 entry.keys.push(key_file.name.to_string());
                 entry.latest_access = Reverse(std::cmp::max(entry.latest_access.0, latest_access));
+            }
+        }
+
+        let unreferenced_cutoff = self.clock.now() - UNREFERENCED_BLOB_GRACE_PERIOD;
+        for (blob_id, blob_file) in &blob_files {
+            if !blobs.contains_key(blob_id)
+                && blob_file
+                    .modified
+                    .is_some_and(|modified| modified < unreferenced_cutoff)
+            {
+                ignore_not_found(self.storage.delete(&blob_file.path))?;
             }
         }
 
@@ -224,9 +241,9 @@ impl<S: Storage, C: Clock, R: RngBytes> LocalCache<S, C, R> {
                 ..
             } = heap.pop().unwrap();
             for key in keys {
-                self.storage.delete(&Self::meta_path(&key))?;
+                ignore_not_found(self.storage.delete(&Self::meta_path(&key)))?;
             }
-            self.storage.delete(&Self::blob_path(&blob_id))?;
+            ignore_not_found(self.storage.delete(&Self::blob_path(&blob_id)))?;
             blob_size_sum -= size;
         }
 
@@ -267,6 +284,7 @@ impl<S: Storage, C: Clock, R: RngBytes> LocalCache<S, C, R> {
                                 subdir: path_entry.name.to_string(),
                                 name: subdir_entry.name.to_string(),
                                 size: subdir_entry.size,
+                                modified: subdir_entry.modified,
                             }))
                         }
                         Err(err) => Some(Err(err)),
@@ -284,6 +302,16 @@ struct SubdirFile {
     subdir: String,
     name: String,
     size: u64,
+    modified: Option<DateTime<Utc>>,
+}
+
+/// Treats a file that no longer exists as success, as another process cleaning the same cache may
+/// have deleted it already.
+fn ignore_not_found<T>(result: IoPathResult<T>) -> IoPathResult<Option<T>> {
+    match result {
+        Err(err) if err.io_error().kind() == ErrorKind::NotFound => Ok(None),
+        result => result.map(Some),
+    }
 }
 
 /// A writer for a cache entry.
@@ -328,6 +356,7 @@ impl<S: Storage, M: AsRef<[u8]>> Close for CacheWriter<S, M> {
 mod tests {
     use super::*;
     use crate::storage::in_memory::InMemoryStorage;
+    use crate::storage::{FileHandle, StorageEntry};
     use crate::util::clock::test_fakes::ControlledClock;
     use chrono::TimeDelta;
 
@@ -475,6 +504,142 @@ mod tests {
 
         let storage = cache.into_storage();
         assert_blob_count(&storage, 2);
+    }
+
+    #[test]
+    fn test_clean_removes_unreferenced_blobs() {
+        let mut clock = ControlledClock::new(Utc::now());
+        let storage = InMemoryStorage::new();
+        let mut cache = LocalCache::with_clock(storage, clock.clone());
+
+        cache_entry_with_content(&mut cache, &["key"], "old content").unwrap();
+        cache_entry_with_content(&mut cache, &["key"], "new content").unwrap();
+        clock.advance_by(TimeDelta::hours(2));
+
+        cache.clean(Some(TimeDelta::days(1)), None).unwrap();
+
+        assert_cache_entry_with_content(&cache, &["key"], "key", "new content");
+        let storage = cache.into_storage();
+        assert_blob_count(&storage, 1);
+    }
+
+    #[test]
+    fn test_clean_keeps_recently_written_unreferenced_blobs() {
+        let mut clock = ControlledClock::new(Utc::now());
+        let storage = InMemoryStorage::new();
+        let mut cache = LocalCache::with_clock(storage, clock.clone());
+
+        cache_entry_with_content(&mut cache, &["key"], "old content").unwrap();
+        cache_entry_with_content(&mut cache, &["key"], "new content").unwrap();
+        clock.advance_by(TimeDelta::minutes(30));
+
+        cache.clean(Some(TimeDelta::days(1)), None).unwrap();
+
+        let storage = cache.into_storage();
+        assert_blob_count(&storage, 2);
+    }
+
+    #[test]
+    fn test_clean_tolerates_unreferenced_blobs_deleted_concurrently() {
+        let mut clock = ControlledClock::new(Utc::now());
+        let storage = ConcurrentlyDeletingStorage::new(StorageOperation::Delete);
+        let mut cache = LocalCache::with_clock(storage, clock.clone());
+
+        cache_entry_with_content(&mut cache, &["unused"], "unused content").unwrap();
+        cache_entry_with_content(&mut cache, &["key"], "old content").unwrap();
+        cache_entry_with_content(&mut cache, &["key"], "new content").unwrap();
+        clock.advance_by(TimeDelta::days(2));
+
+        cache.clean(Some(TimeDelta::days(1)), None).unwrap();
+
+        assert_no_cache_entry(&cache, &["unused"]);
+    }
+
+    #[test]
+    fn test_clean_tolerates_evicted_entries_deleted_concurrently() {
+        let mut clock = ControlledClock::default();
+        let storage = ConcurrentlyDeletingStorage::new(StorageOperation::Delete);
+        let mut cache = LocalCache::with_clock(storage, clock.clone());
+
+        cache_entry_with_content(&mut cache, &["old"], "old content").unwrap();
+        clock.advance_by(TimeDelta::days(2));
+
+        cache.clean(Some(TimeDelta::days(1)), None).unwrap();
+
+        assert_no_cache_entry(&cache, &["old"]);
+    }
+
+    #[test]
+    fn test_clean_tolerates_meta_files_deleted_concurrently() {
+        let mut clock = ControlledClock::new(Utc::now());
+        let storage = ConcurrentlyDeletingStorage::new(StorageOperation::Get);
+        let mut cache = LocalCache::with_clock(storage, clock.clone());
+
+        cache_entry_with_content(&mut cache, &["key"], "content").unwrap();
+        clock.advance_by(TimeDelta::days(2));
+
+        cache.clean(Some(TimeDelta::days(1)), None).unwrap();
+
+        let storage = cache.into_storage();
+        assert_blob_count(&storage, 0);
+    }
+
+    #[derive(PartialEq)]
+    enum StorageOperation {
+        Delete,
+        Get,
+    }
+
+    /// Simulates another process deleting a file right before `operation` accesses it.
+    struct ConcurrentlyDeletingStorage {
+        storage: InMemoryStorage,
+        operation: StorageOperation,
+    }
+
+    impl ConcurrentlyDeletingStorage {
+        fn new(operation: StorageOperation) -> Self {
+            Self {
+                storage: InMemoryStorage::new(),
+                operation,
+            }
+        }
+
+        fn delete_before(&self, operation: StorageOperation, path: &str) -> IoPathResult<()> {
+            if self.operation == operation {
+                self.storage.delete(path)?;
+            }
+            Ok(())
+        }
+    }
+
+    impl Storage for ConcurrentlyDeletingStorage {
+        type Reader = <InMemoryStorage as Storage>::Reader;
+        type Writer = <InMemoryStorage as Storage>::Writer;
+
+        fn delete(&self, path: &str) -> IoPathResult<()> {
+            self.delete_before(StorageOperation::Delete, path)?;
+            self.storage.delete(path)
+        }
+
+        fn exists_file(&self, path: &str) -> IoPathResult<bool> {
+            self.storage.exists_file(path)
+        }
+
+        fn get(&self, path: &str) -> IoPathResult<FileHandle<Self::Reader>> {
+            self.delete_before(StorageOperation::Get, path)?;
+            self.storage.get(path)
+        }
+
+        fn list(
+            &self,
+            path: &str,
+        ) -> IoPathResult<impl Iterator<Item = IoPathResult<StorageEntry<'_>>>> {
+            self.storage.list(path)
+        }
+
+        fn put(&self, path: &str) -> IoPathResult<Self::Writer> {
+            self.storage.put(path)
+        }
     }
 
     #[test]

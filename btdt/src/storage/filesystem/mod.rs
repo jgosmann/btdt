@@ -8,7 +8,7 @@ use crate::storage::{EntryType, FileHandle, Storage, StorageEntry};
 use fs2::FileExt;
 use rand::rngs::ThreadRng;
 use std::borrow::Cow;
-use std::fs::File;
+use std::fs::{DirEntry, File};
 use std::io::ErrorKind;
 use std::path::{Component, PathBuf};
 use std::{fs, io};
@@ -114,33 +114,10 @@ impl Storage for FilesystemStorage {
             .with_path(&canonical_path)?
             .map(move |entry| {
                 let entry = entry.with_path(&canonical_path)?;
-                if let Some(entry_type) = match entry.file_type().with_path(entry.path())? {
-                    file_type if file_type.is_file() => Some(EntryType::File),
-                    file_type if file_type.is_dir() => Some(EntryType::Directory),
-                    _ => None,
-                } {
-                    Ok(Some(StorageEntry {
-                        name: Cow::Owned(
-                            entry
-                                .file_name()
-                                .into_string()
-                                .map_err(|_| {
-                                    io::Error::new(
-                                        ErrorKind::InvalidData,
-                                        "File name is not valid Unicode",
-                                    )
-                                })
-                                .with_path(entry.path())?,
-                        ),
-                        entry_type,
-                        size: if entry.file_type().with_path(entry.path())?.is_file() {
-                            entry.metadata().with_path(entry.path())?.len()
-                        } else {
-                            0
-                        },
-                    }))
-                } else {
-                    Ok(None)
+                match storage_entry(&entry) {
+                    // The file was deleted or renamed after the directory was read.
+                    Err(err) if err.kind() == ErrorKind::NotFound => Ok(None),
+                    result => result.with_path(entry.path()),
                 }
             })
             .filter_map(Result::transpose))
@@ -185,6 +162,34 @@ impl FilesystemStorage {
         }
         Ok(self.root.join(&path[1..]))
     }
+}
+
+fn storage_entry(entry: &DirEntry) -> io::Result<Option<StorageEntry<'static>>> {
+    let file_type = entry.file_type()?;
+    let entry_type = if file_type.is_file() {
+        EntryType::File
+    } else if file_type.is_dir() {
+        EntryType::Directory
+    } else {
+        return Ok(None);
+    };
+    let name = entry
+        .file_name()
+        .into_string()
+        .map_err(|_| io::Error::new(ErrorKind::InvalidData, "File name is not valid Unicode"))?;
+    let (size, modified) = match entry_type {
+        EntryType::File => {
+            let metadata = entry.metadata()?;
+            (metadata.len(), Some(metadata.modified()?.into()))
+        }
+        EntryType::Directory => (0, None),
+    };
+    Ok(Some(StorageEntry {
+        entry_type,
+        name: Cow::Owned(name),
+        size,
+        modified,
+    }))
 }
 
 #[cfg(test)]
@@ -274,6 +279,24 @@ mod tests {
         let mut storage = FilesystemStorage::new(storage_root.clone());
         assert!(write_file_to_storage(&mut storage, "/../file.txt", "file-content").is_err());
         assert!(!storage_root.join("file.txt").exists());
+    }
+
+    #[test]
+    fn test_list_skips_files_deleted_while_listing() {
+        let storage = FilesystemStorageTestFixture::new();
+        write_file_to_storage(&storage, "/dir/a.txt", "a").unwrap();
+        write_file_to_storage(&storage, "/dir/b.txt", "b").unwrap();
+
+        let mut entries = storage.list("/dir").unwrap();
+        let first = entries.next().unwrap().unwrap();
+        let other = if first.name.as_str() == "a.txt" {
+            "/dir/b.txt"
+        } else {
+            "/dir/a.txt"
+        };
+        storage.delete(other).unwrap();
+
+        assert_eq!(entries.collect::<IoPathResult<Vec<_>>>().unwrap(), vec![]);
     }
 
     struct PushCwd {
